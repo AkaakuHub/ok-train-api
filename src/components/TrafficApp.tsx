@@ -147,6 +147,120 @@ const DIRECTION_MAP: { [key: string]: string } = {
 	"1": "上り",
 };
 
+// ---路線データ管理機能を追加---
+// 路線の構造と関係性をJSON配列から構築
+const useLineStructure = () => {
+	// メモ化して路線構造を作成
+	return useMemo(() => {
+		// 路線を親子関係で整理
+		const mainLines: Record<string, any> = {};
+		const linesByID: Record<string, any> = {};
+
+		// 路線データを構築
+		config.lines.forEach((line) => {
+			linesByID[line.code] = {
+				...line,
+				stations: [],
+			};
+		});
+
+		// 駅をそれぞれの路線に割り当て
+		config.positions
+			.filter((p) => p.kind === "駅")
+			.forEach((station) => {
+				const linePrefix = station.ID.charAt(0);
+				let lineCode: string;
+
+				// IDの接頭辞から路線コードを判定
+				if (linePrefix === "E") {
+					if (station.ID.startsWith("E08")) {
+						lineCode = "3"; // 井の頭線
+					} else if (
+						station.ID.startsWith("E04") ||
+						station.ID.startsWith("E05")
+					) {
+						lineCode = "2"; // 相模原線
+					} else {
+						lineCode = "1"; // 京王線
+					}
+				} else {
+					return; // 対象外の駅はスキップ
+				}
+
+				if (linesByID[lineCode]) {
+					linesByID[lineCode].stations.push(station);
+				}
+			});
+
+		// 駅を正しく並べ替え（京王線の実際の配列順）
+		Object.values(linesByID).forEach((line: any) => {
+			// 駅コードに基づいて並べ替えるが、実際の路線図に沿った順序に調整
+			line.stations.sort((a: any, b: any) => {
+				// 本来は実際の路線順にソートすべき
+				// 京王線、相模原線、井の頭線で分岐処理
+				if (line.code === "1") {
+					// 京王線
+					return a.ID.localeCompare(b.ID);
+				}
+				if (line.code === "2") {
+					// 相模原線
+					return a.ID.localeCompare(b.ID);
+				}
+				// 井の頭線
+				return a.ID.localeCompare(b.ID);
+			});
+		});
+
+		return {
+			byCode: linesByID,
+			// 主要な路線とその分岐関連を表現
+			structure: {
+				"1": {
+					// 京王線
+					main: linesByID["1"],
+					branches: [
+						{
+							name: "新宿線",
+							fromStation: "E02", // 笹塚駅
+							toStation: "E01X", // 本八幡方面
+						},
+						{
+							name: "相模原線",
+							fromStation: "E26", // 調布
+							lineCode: "2",
+						},
+						{
+							name: "競馬場線",
+							fromStation: "E19", // 東府中
+							toStation: "E19K", // 府中競馬正門前
+						},
+						{
+							name: "動物園線",
+							fromStation: "E22", // 多摩動物公園
+							toStation: "E22D", // 多摩動物公園
+						},
+						{
+							name: "高尾線",
+							fromStation: "E35", // 北野
+							toStation: "E37T", // 高尾山口
+						},
+					],
+				},
+				"2": {
+					// 相模原線
+					main: linesByID["2"],
+					branches: [],
+				},
+				"3": {
+					// 井の頭線
+					main: linesByID["3"],
+					branches: [],
+				},
+			},
+		};
+	}, []);
+};
+
 // Hook to load dynamic trafic info
 const useTraffic = () => {
 	const [data, setData] = useState(() => TrafficSchema.parse(trafficJson));
@@ -220,33 +334,20 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children }) => {
 // Line diagram component
 type Point = z.infer<typeof TrafficPointSchema> & { stationId: string };
 
+// LineTimelineコンポーネントを改良
 const LineTimeline: React.FC<{
 	lineCode: string;
 	lineName: string;
 	points: Point[];
 	onTrainClick: (point: Point) => void;
 }> = ({ lineCode, lineName, points, onTrainClick }) => {
-	// Group stations by line
-	const stations = useMemo(
-		() =>
-			config.positions
-				.filter((p) => {
-					if (lineCode === "1")
-						return (
-							p.kind === "駅" && p.ID.startsWith("E") && !p.ID.startsWith("E08")
-						); // 京王線
-					if (lineCode === "2")
-						return (
-							p.kind === "駅" &&
-							(p.ID.startsWith("E04") || p.ID.startsWith("E05"))
-						); // 相模原線
-					if (lineCode === "3")
-						return p.kind === "駅" && p.ID.startsWith("E08"); // 井の頭線
-					return false;
-				})
-				.sort((a, b) => a.ID.localeCompare(b.ID)),
-		[lineCode],
-	);
+	const timelineRef = useRef<HTMLDivElement>(null);
+	const lineStructure = useLineStructure();
+
+	// 路線の駅を取得
+	const stations = useMemo(() => {
+		return lineStructure.byCode[lineCode]?.stations || [];
+	}, [lineCode, lineStructure]);
 
 	// パフォーマンス最適化
 	const trainsByStation = useMemo(
@@ -260,9 +361,6 @@ const LineTimeline: React.FC<{
 			}, {}),
 		[points],
 	);
-
-	// Get the reference to scroll horizontally
-	const timelineRef = useRef<HTMLDivElement>(null);
 
 	return (
 		<div className="mb-8">
@@ -300,8 +398,8 @@ const LineTimeline: React.FC<{
 					</button>
 				</div>
 
-				<div ref={timelineRef} className="relative overflow-x-auto ">
-					<div className="flex items-center min-w-max h-80 py-20">
+				<div ref={timelineRef} className="relative overflow-x-auto pb-4">
+					<div className="flex items-center min-w-max h-80 py-20 px-4">
 						{/* Station timeline */}
 						<div className="flex items-center">
 							{stations.map((station, index) => (
@@ -335,28 +433,31 @@ const LineTimeline: React.FC<{
 											const isInbound = train.ki === "1"; // 上り
 											const isMoving = train.bs === "1"; // 走行中かどうか
 
+											// 被らないように調整された位置
+											const yOffset = trainIndex * 5; // 複数の電車がある場合に縦方向にオフセット
+
 											return (
 												<div
 													key={`${train.tr}-${trainIndex}`}
-													className={`absolute ${isInbound ? "-top-20" : "top-12"} left-1/2 transform -translate-x-1/2`} // 位置調整
+													className={`absolute ${isInbound ? `-top-${16 + yOffset}` : `top-${12 + yOffset}`} left-1/2 transform -translate-x-1/2`}
 													onClick={() => onTrainClick(train)}
 												>
 													<div
 														className={`
-          flex items-center justify-center
-          w-16 h-7 rounded-full ${isMoving ? "bg-white" : "bg-gray-100"} shadow-md border
-          cursor-pointer hover:bg-gray-50 transition-colors
-          relative ${isMoving ? "animate-pulse" : ""}
-        `}
+                              flex items-center justify-center
+                              w-16 h-7 rounded-full ${isMoving ? "bg-white" : "bg-gray-100"} shadow-md border
+                              cursor-pointer hover:bg-gray-50 transition-colors
+                              relative ${isMoving ? "animate-pulse" : ""}
+                            `}
 													>
 														<span className="text-xs font-bold">
 															{train.tr.trim()}
 														</span>
 
-														{/* 移動中の電車の場合、矢印を表示 */}
+														{/* 移動中の電車の場合、矢印を表示 - 修正版 */}
 														{isMoving && (
 															<div
-																className={`absolute ${isInbound ? "-left-6" : "right--6"} top-1/2 transform -translate-y-1/2`}
+																className={`absolute ${isInbound ? "-left-6" : "-right-6"} top-1/2 transform -translate-y-1/2`}
 															>
 																<div
 																	className={`text-gray-700 flex items-center`}
@@ -392,6 +493,15 @@ const LineTimeline: React.FC<{
 						</div>
 					</div>
 				</div>
+
+				{/* 分岐線表示（オプション） */}
+				{lineCode === "1" &&
+					lineStructure.structure["1"].branches.map((branch) => (
+						<div key={branch.name} className="mt-6">
+							<div className="text-sm font-medium mb-2">{branch.name}</div>
+							{/* ここに分岐線の駅を表示 */}
+						</div>
+					))}
 			</div>
 		</div>
 	);
