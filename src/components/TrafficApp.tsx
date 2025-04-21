@@ -2,6 +2,7 @@
 
 import {
 	IconAlertCircle,
+	IconArrowLeft,
 	IconArrowRight,
 	IconChevronLeft,
 	IconChevronRight,
@@ -12,7 +13,7 @@ import {
 	IconX,
 } from "@tabler/icons-react";
 import type React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import ikisakiJson from "../assets/ikisaki.json";
 import lineJson from "../assets/line.json";
@@ -226,31 +227,38 @@ const LineTimeline: React.FC<{
 	onTrainClick: (point: Point) => void;
 }> = ({ lineCode, lineName, points, onTrainClick }) => {
 	// Group stations by line
-	const stations = config.positions
-		.filter((p) => {
-			if (lineCode === "1")
-				return (
-					p.kind === "駅" && p.ID.startsWith("E") && !p.ID.startsWith("E08")
-				); // 京王線
-			if (lineCode === "2")
-				return (
-					p.kind === "駅" && (p.ID.startsWith("E04") || p.ID.startsWith("E05"))
-				); // 相模原線
-			if (lineCode === "3") return p.kind === "駅" && p.ID.startsWith("E08"); // 井の頭線
-			return false;
-		})
-		.sort((a, b) => a.ID.localeCompare(b.ID));
+	const stations = useMemo(
+		() =>
+			config.positions
+				.filter((p) => {
+					if (lineCode === "1")
+						return (
+							p.kind === "駅" && p.ID.startsWith("E") && !p.ID.startsWith("E08")
+						); // 京王線
+					if (lineCode === "2")
+						return (
+							p.kind === "駅" &&
+							(p.ID.startsWith("E04") || p.ID.startsWith("E05"))
+						); // 相模原線
+					if (lineCode === "3")
+						return p.kind === "駅" && p.ID.startsWith("E08"); // 井の頭線
+					return false;
+				})
+				.sort((a, b) => a.ID.localeCompare(b.ID)),
+		[lineCode],
+	);
 
-	// Group trains by station
-	const trainsByStation = points.reduce<Record<string, Point[]>>(
-		(acc, point) => {
-			if (!acc[point.stationId]) {
-				acc[point.stationId] = [];
-			}
-			acc[point.stationId].push(point);
-			return acc;
-		},
-		{},
+	// パフォーマンス最適化
+	const trainsByStation = useMemo(
+		() =>
+			points.reduce<Record<string, Point[]>>((acc, point) => {
+				if (!acc[point.stationId]) {
+					acc[point.stationId] = [];
+				}
+				acc[point.stationId].push(point);
+				return acc;
+			}, {}),
+		[points],
 	);
 
 	// Get the reference to scroll horizontally
@@ -292,11 +300,8 @@ const LineTimeline: React.FC<{
 					</button>
 				</div>
 
-				<div
-					ref={timelineRef}
-					className="relative overflow-x-auto "
-				>
-					<div className="flex items-center min-w-max h-80">
+				<div ref={timelineRef} className="relative overflow-x-auto ">
+					<div className="flex items-center min-w-max h-80 py-20">
 						{/* Station timeline */}
 						<div className="flex items-center">
 							{stations.map((station, index) => (
@@ -328,45 +333,48 @@ const LineTimeline: React.FC<{
 												(s) => s.code === train.sy_tr,
 											) || { name: "", iconname: "" };
 											const isInbound = train.ki === "1"; // 上り
+											const isMoving = train.bs === "1"; // 走行中かどうか
 
 											return (
 												<div
 													key={`${train.tr}-${trainIndex}`}
-													className={`absolute ${isInbound ? "-top-16" : "top-8"} left-1/2 transform -translate-x-1/2`}
+													className={`absolute ${isInbound ? "-top-20" : "top-12"} left-1/2 transform -translate-x-1/2`} // 位置調整
 													onClick={() => onTrainClick(train)}
 												>
 													<div
 														className={`
-                            flex items-center justify-center
-                            w-16 h-7 rounded-full bg-white shadow-md border
-                            cursor-pointer hover:bg-gray-50 transition-colors
-                            relative
-                          `}
+          flex items-center justify-center
+          w-16 h-7 rounded-full ${isMoving ? "bg-white" : "bg-gray-100"} shadow-md border
+          cursor-pointer hover:bg-gray-50 transition-colors
+          relative ${isMoving ? "animate-pulse" : ""}
+        `}
 													>
 														<span className="text-xs font-bold">
 															{train.tr.trim()}
 														</span>
 
-														{/* Direction indicator with animation */}
-														<div
-															className={`absolute ${isInbound ? "right-full" : "left-full"} top-1/2 transform -translate-y-1/2 flex items-center`}
-														>
+														{/* 移動中の電車の場合、矢印を表示 */}
+														{isMoving && (
 															<div
-																className={`text-gray-300 animate-pulse flex ${isInbound ? "flex-row-reverse" : "flex-row"}`}
+																className={`absolute ${isInbound ? "-left-6" : "right--6"} top-1/2 transform -translate-y-1/2`}
 															>
-																{isInbound ? (
-																	<IconChevronLeft
-																		size={16}
-																		className="opacity-80"
-																	/>
-																) : (
-																	<IconChevronRight
-																		size={16}
-																		className="opacity-80"
-																	/>
-																)}
+																<div
+																	className={`text-gray-700 flex items-center`}
+																>
+																	{isInbound ? (
+																		<IconArrowRight
+																			size={16}
+																			className="animate-pulse"
+																		/>
+																	) : (
+																		<IconArrowLeft
+																			size={16}
+																			className="animate-pulse"
+																		/>
+																	)}
+																</div>
 															</div>
-														</div>
+														)}
 
 														{/* Service type badge */}
 														<div
