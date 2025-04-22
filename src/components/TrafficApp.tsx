@@ -64,7 +64,7 @@ const RailroadChgSchema = z.object({ name: z.string(), link: z.string() });
 const StationInfoSchema = z.record(
 	z.object({
 		iu: z.boolean(),
-		line: z.string(),
+		line: z.array(z.string()),
 		order: z.number(),
 	}),
 );
@@ -257,175 +257,244 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children }) => {
 // Line diagram component
 type Point = z.infer<typeof TrafficPointSchema> & { stationId: string };
 
+// 分岐点を検出するユーティリティ関数
+const detectBranches = (lineCode: string) => {
+  // 分岐点を格納するオブジェクト
+  const branches: Record<string, string[]> = {};
+  
+  // lineCodeを含む駅を取得
+  const lineStations = Object.entries(config.stationInfo)
+    .filter(([_, info]) => info.line.includes(lineCode));
+  
+  // 分岐点を探す
+  lineStations.forEach(([stationId, info]) => {
+    // 2つ以上の路線を持つ駅は分岐点
+    if (info.line.length > 1) {
+      // 分岐先の路線（自分自身を除く）
+      const branchLines = info.line.filter(l => l !== lineCode);
+      
+      if (branchLines.length > 0) {
+        branches[stationId] = branchLines;
+      }
+    }
+  });
+  
+  return branches;
+};
+
+// 分岐線上の駅を取得する関数
+const getBranchStations = (branchLine: string) => {
+  return Object.entries(config.stationInfo)
+    .filter(([_, info]) => info.line.includes(branchLine) && !info.line.includes("1a"))
+    .map(([id, _]) => id)
+    .sort((a, b) => config.stationInfo[a].order - config.stationInfo[b].order);
+};
+
+// LineTimelineコンポーネントの修正
 const LineTimeline: React.FC<{
-	lineCode: string;
-	lineName: string;
-	points: Point[];
-	onTrainClick: (point: Point) => void;
+  lineCode: string;
+  lineName: string;
+  points: Point[];
+  onTrainClick: (point: Point) => void;
 }> = ({ lineCode, lineName, points, onTrainClick }) => {
-	// 路線に属する駅を取得して順序に従って並べる
-	const stations = useMemo(() => {
-		const stationsForLine = Object.entries(config.stationInfo)
-			.filter(([stationId, info]) => info.line === lineCode)
-			.map(([stationId, info]) => {
-				const stationInfo = config.positions.find((p) => p.ID === stationId);
-				return {
-					...stationInfo,
-					lineInfo: info,
-					ID: stationId,
-				};
-			})
-			.sort((a, b) => a.lineInfo.order - b.lineInfo.order);
+  // 路線に属する駅を取得して順序に従って並べる
+  const stations = useMemo(() => {
+    const stationsForLine = Object.entries(config.stationInfo)
+      .filter(([stationId, info]) => info.line.includes(lineCode))
+      .map(([stationId, info]) => {
+        const stationInfo = config.positions.find((p) => p.ID === stationId);
+        return {
+          ...stationInfo,
+          lineInfo: info,
+          ID: stationId,
+        };
+      })
+      .sort((a, b) => a.lineInfo.order - b.lineInfo.order);
 
-		return stationsForLine;
-	}, [lineCode]);
+    return stationsForLine;
+  }, [lineCode]);
 
-	// パフォーマンス最適化
-	const trainsByStation = useMemo(
-		() =>
-			points.reduce<Record<string, Point[]>>((acc, point) => {
-				if (!acc[point.stationId]) {
-					acc[point.stationId] = [];
-				}
-				acc[point.stationId].push(point);
-				return acc;
-			}, {}),
-		[points],
-	);
+  // 分岐点を検出
+  const branches = useMemo(() => detectBranches(lineCode), [lineCode]);
 
-	// Get the reference to scroll horizontally
-	const timelineRef = useRef<HTMLDivElement>(null);
+  // パフォーマンス最適化
+  const trainsByStation = useMemo(
+    () =>
+      points.reduce<Record<string, Point[]>>((acc, point) => {
+        if (!acc[point.stationId]) {
+          acc[point.stationId] = [];
+        }
+        acc[point.stationId].push(point);
+        return acc;
+      }, {}),
+    [points],
+  );
 
-	return (
-		<div className="mb-8">
-			<div className="flex items-center mb-2">
-				<div
-					className={`w-3 h-3 rounded-full ${LINE_COLORS[lineCode]} mr-2`}
-				></div>
-				<h2 className="text-lg font-bold">{lineName}</h2>
-			</div>
+  // Get the reference to scroll horizontally
+  const timelineRef = useRef<HTMLDivElement>(null);
 
-			<div
-				className={`rounded-xl ${LINE_BG_COLORS[lineCode]} p-4 border border-gray-200 shadow-sm`}
-			>
-				<div className="flex mb-4 overflow-x-auto gap-4 no-scrollbar">
-					<button
-						className="flex items-center justify-center p-2 bg-white rounded-full shadow-sm text-gray-500 hover:bg-gray-50"
-						onClick={() => {
-							if (timelineRef.current) {
-								timelineRef.current.scrollLeft -= 300;
-							}
-						}}
-					>
-						<IconChevronLeft size={20} />
-					</button>
+  return (
+    <div className="mb-8">
+      <div className="flex items-center mb-2">
+        <div
+          className={`w-3 h-3 rounded-full ${LINE_COLORS[lineCode]} mr-2`}
+        ></div>
+        <h2 className="text-lg font-bold">{lineName}</h2>
+      </div>
 
-					<button
-						className="flex items-center justify-center p-2 bg-white rounded-full shadow-sm text-gray-500 hover:bg-gray-50"
-						onClick={() => {
-							if (timelineRef.current) {
-								timelineRef.current.scrollLeft += 300;
-							}
-						}}
-					>
-						<IconChevronRight size={20} />
-					</button>
-				</div>
+      <div
+        className={`rounded-xl ${LINE_BG_COLORS[lineCode]} p-4 border border-gray-200 shadow-sm`}
+      >
+        <div className="flex mb-4 overflow-x-auto gap-4 no-scrollbar">
+          <button
+            className="flex items-center justify-center p-2 bg-white rounded-full shadow-sm text-gray-500 hover:bg-gray-50"
+            onClick={() => {
+              if (timelineRef.current) {
+                timelineRef.current.scrollLeft -= 300;
+              }
+            }}
+          >
+            <IconChevronLeft size={20} />
+          </button>
 
-				<div ref={timelineRef} className="relative overflow-x-auto ">
-					<div className="flex items-center min-w-max h-80 py-20">
-						{/* Station timeline */}
-						<div className="flex items-center">
-							{stations.map((station, index) => (
-								<div key={station.ID} className="flex flex-col items-center">
-									{/* Station connection line */}
-									{index > 0 && (
-										<div className={`h-1 w-20 ${LINE_COLORS[lineCode]}`}></div>
-									)}
+          <button
+            className="flex items-center justify-center p-2 bg-white rounded-full shadow-sm text-gray-500 hover:bg-gray-50"
+            onClick={() => {
+              if (timelineRef.current) {
+                timelineRef.current.scrollLeft += 300;
+              }
+            }}
+          >
+            <IconChevronRight size={20} />
+          </button>
+        </div>
 
-									{/* Station marker */}
-									<div className="relative group">
-										{/* 地下駅の表示 */}
-										<div
-											className={`w-4 h-4 rounded-full ${station.lineInfo.iu ? "bg-white border-2 border-gray-400" : `${LINE_COLORS[lineCode]} border border-white`}`}
-										></div>
+        <div ref={timelineRef} className="relative overflow-x-auto ">
+          <div className="flex items-center min-w-max h-80 py-20">
+            {/* Station timeline */}
+            <div className="flex items-center">
+              {stations.map((station, index) => (
+                <div key={station.ID} className="flex flex-col items-center">
+                  {/* Station connection line */}
+                  {index > 0 && (
+                    <div className={`h-1 w-20 ${LINE_COLORS[lineCode]}`}></div>
+                  )}
 
-										{/* Station name */}
-										<div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap text-xs font-medium">
-											{station.name}
-										</div>
+                  {/* Station marker - 分岐点は視覚的に区別 */}
+                  <div className="relative group">
+                    {/* 地下駅の表示または分岐駅の表示 */}
+                    <div
+                      className={`w-4 h-4 rounded-full 
+                        ${station.lineInfo.iu 
+                          ? "bg-white border-2 border-gray-400" 
+                          : branches[station.ID] 
+                            ? `${LINE_COLORS[lineCode]} border-2 border-white ring-2 ring-gray-300` 
+                            : `${LINE_COLORS[lineCode]} border border-white`}`}
+                    ></div>
 
-										{/* Trains at this station */}
-										{trainsByStation[station.ID]?.map((train, trainIndex) => {
-											const service = config.syasyu.find(
-												(s) => s.code === train.sy_tr,
-											) || { name: "", iconname: "" };
-											const isInbound = train.ki === "0"; // 上り
+                    {/* 分岐アイコン表示 */}
+                    {branches[station.ID] && (
+                      <div className="absolute -top-4 -right-4 w-5 h-5 bg-white rounded-full border border-gray-300 flex items-center justify-center">
+                        <IconArrowRight size={12} className="text-gray-600" />
+                      </div>
+                    )}
 
-											return (
-												<div
-													key={`${train.tr}-${trainIndex}`}
-													className={`absolute ${isInbound ? "-top-16" : "top-8"} left-1/2 transform -translate-x-1/2`}
-													onClick={() => onTrainClick(train)}
-												>
-													<div
-														className={`
+                    {/* Station name */}
+                    <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap text-xs font-medium">
+                      {station.name}
+                    </div>
+
+                    {/* Trains at this station */}
+                    {trainsByStation[station.ID]?.map((train, trainIndex) => {
+                      const service = config.syasyu.find(
+                        (s) => s.code === train.sy_tr,
+                      ) || { name: "", iconname: "" };
+                      const isInbound = train.ki === "0"; // 上り
+
+                      return (
+                        <div
+                          key={`${train.tr}-${trainIndex}`}
+                          className={`absolute ${isInbound ? "-top-16" : "top-8"} left-1/2 transform -translate-x-1/2`}
+                          onClick={() => onTrainClick(train)}
+                        >
+                          <div
+                            className={`
                             flex items-center justify-center
                             w-16 h-7 rounded-full bg-white shadow-md border
                             cursor-pointer hover:bg-gray-50 transition-colors
                             relative
                           `}
-													>
-														<span className="text-xs font-bold">
-															{train.tr.trim()}
-														</span>
+                          >
+                            <span className="text-xs font-bold">
+                              {train.tr.trim()}
+                            </span>
 
-														{/* Direction indicator with animation */}
-														<div
-															className={`absolute ${isInbound ? "right-full" : "left-full"} top-1/2 transform -translate-y-1/2 flex items-center`}
-														>
-															<div
-																className={`text-gray-900 animate-pulse flex ${isInbound ? "flex-row-reverse" : "flex-row"}`}
-															>
-																{isInbound ? (
-																	<IconChevronLeft
-																		size={16}
-																		className="opacity-80"
-																	/>
-																) : (
-																	<IconChevronRight
-																		size={16}
-																		className="opacity-80"
-																	/>
-																)}
-															</div>
-														</div>
+                            {/* Direction indicator with animation */}
+                            <div
+                              className={`absolute ${isInbound ? "right-full" : "left-full"} top-1/2 transform -translate-y-1/2 flex items-center`}
+                            >
+                              <div
+                                className={`text-gray-900 animate-pulse flex ${isInbound ? "flex-row-reverse" : "flex-row"}`}
+                              >
+                                {isInbound ? (
+                                  <IconChevronLeft
+                                    size={16}
+                                    className="opacity-80"
+                                  />
+                                ) : (
+                                  <IconChevronRight
+                                    size={16}
+                                    className="opacity-80"
+                                  />
+                                )}
+                              </div>
+                            </div>
 
-														{/* Service type badge */}
-														<div
-															className={`absolute -top-3 -right-3 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${SERVICE_COLORS[train.sy_tr] || "bg-gray-500 text-white"}`}
-														>
-															{service.iconname}
-														</div>
+                            {/* Service type badge */}
+                            <div
+                              className={`absolute -top-3 -right-3 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${SERVICE_COLORS[train.sy_tr] || "bg-gray-500 text-white"}`}
+                            >
+                              {service.iconname}
+                            </div>
 
-														{train.dl !== "00" && (
-															<div className="absolute -top-3 -left-3 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold bg-black text-red-600">
-																{train.dl}分
-															</div>
-														)}
-													</div>
-												</div>
-											);
-										})}
-									</div>
-								</div>
-							))}
-						</div>
-					</div>
-				</div>
-			</div>
-		</div>
-	);
+                            {train.dl !== "00" && (
+                              <div className="absolute -top-3 -left-3 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold bg-black text-red-600">
+                                {train.dl}分
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  
+                  {/* 分岐線の表示 */}
+                  {branches[station.ID] && (
+                    <div className="relative mt-6">
+                      <div className="absolute left-0 transform -translate-x-1/2 -translate-y-1/2">
+                        <div className="text-xs font-medium text-gray-500 mb-1">分岐</div>
+                        <div className="flex flex-col gap-1">
+                          {branches[station.ID].map(branchLine => {
+                            const branchLineDetails = LINE_DETAILS[branchLine];
+                            return (
+                              <div key={branchLine} className="flex items-center gap-1">
+                                <div className={`w-2 h-2 rounded-full ${LINE_COLORS[branchLine]}`}></div>
+                                <span className="text-xs font-medium">{branchLineDetails?.name || branchLine}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 // Train detail modal component
@@ -452,7 +521,7 @@ const TrainDetailModal: React.FC<{
 	if (station) {
 		const stationLineInfo = config.stationInfo[station.ID];
 		if (stationLineInfo) {
-			const lineDetail = LINE_DETAILS[stationLineInfo.line];
+			const lineDetail = LINE_DETAILS[stationLineInfo.line[0]];
 			line = config.lines.find((l) => l.code === lineDetail?.mainLine) || {
 				name: "不明",
 			};
@@ -601,18 +670,18 @@ const StatsBar: React.FC<{ trafficData: z.infer<typeof TrafficSchema> }> = ({
 
 // 路線ごとの電車情報を取得するためのフィルタリング関数
 const getPointsForLine = (
-	traffic: z.infer<typeof TrafficSchema>,
-	lineCode: string,
+  traffic: z.infer<typeof TrafficSchema>,
+  lineCode: string,
 ) => {
-	// stationInfoから指定された路線の駅IDを取得
-	const stationIds = Object.entries(config.stationInfo)
-		.filter(([_, info]) => info.line === lineCode)
-		.map(([id, _]) => id);
+  // stationInfoから指定された路線の駅IDを取得
+  const stationIds = Object.entries(config.stationInfo)
+    .filter(([_, info]) => info.line.includes(lineCode))
+    .map(([id, _]) => id);
 
-	// 該当する駅にいる電車を取得
-	return traffic.TS.filter((station) =>
-		stationIds.includes(station.id),
-	).flatMap((st) => st.ps.map((p) => ({ ...p, stationId: st.id })));
+  // 該当する駅にいる電車を取得
+  return traffic.TS.filter((station) =>
+    stationIds.includes(station.id),
+  ).flatMap((st) => st.ps.map((p) => ({ ...p, stationId: st.id })));
 };
 
 // Main App component
