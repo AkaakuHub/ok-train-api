@@ -19,6 +19,7 @@ import lineJson from "../assets/line.json";
 import otherChgJson from "../assets/other_chg.json";
 import positionJson from "../assets/position.json";
 import railroadChgJson from "../assets/railload_chg.json";
+import stationInfoJson from "../assets/station_info.json";
 import syasyuJson from "../assets/syasyu.json";
 import trafficJson from "../assets/traffic_info.json";
 
@@ -60,6 +61,13 @@ const OtherChgSchema = z.object({
 	other: z.array(z.object({ linkname: z.string(), link: z.string() })),
 });
 const RailroadChgSchema = z.object({ name: z.string(), link: z.string() });
+const StationInfoSchema = z.record(
+	z.object({
+		iu: z.boolean(),
+		line: z.string(),
+		order: z.number(),
+	}),
+);
 
 // Traffic JSON (dynamic)
 const TrafficPointSchema = z.object({
@@ -107,23 +115,50 @@ const config = {
 	destinations: z.array(IkisakiSchema).parse(ikisakiJson.ikisaki),
 	otherChg: z.array(OtherChgSchema).parse(otherChgJson.chg),
 	railroadChg: z.array(RailroadChgSchema).parse(railroadChgJson.chg),
+	stationInfo: StationInfoSchema.parse(stationInfoJson),
+};
+
+// 路線名の定義
+const LINE_DETAILS = {
+	"1a": { name: "京王本線", mainLine: "1" },
+	"1b": { name: "京王多摩線", mainLine: "1" },
+	"1c": { name: "京王競馬線", mainLine: "1" },
+	"1d": { name: "京王動物線", mainLine: "1" },
+	"1e": { name: "京王高尾線", mainLine: "1" },
+	"2": { name: "相模原線", mainLine: "2" },
+	"3": { name: "井の頭線", mainLine: "3" },
 };
 
 // Line colors
 const LINE_COLORS = {
 	"1": "bg-red-500", // 京王線
+	"1a": "bg-red-500", // 京王本線
+	"1b": "bg-red-400", // 京王多摩線
+	"1c": "bg-pink-500", // 京王競馬線
+	"1d": "bg-rose-500", // 京王動物線
+	"1e": "bg-orange-500", // 京王高尾線
 	"2": "bg-blue-500", // 相模原線
 	"3": "bg-amber-500", // 井の頭線
 };
 
 const LINE_BG_COLORS = {
 	"1": "bg-red-50", // 京王線
+	"1a": "bg-red-50", // 京王本線
+	"1b": "bg-red-50", // 京王多摩線
+	"1c": "bg-pink-50", // 京王競馬線
+	"1d": "bg-rose-50", // 京王動物線
+	"1e": "bg-orange-50", // 京王高尾線
 	"2": "bg-blue-50", // 相模原線
 	"3": "bg-amber-50", // 井の頭線
 };
 
 const LINE_TEXT_COLORS = {
 	"1": "text-red-600", // 京王線
+	"1a": "text-red-600", // 京王本線
+	"1b": "text-red-500", // 京王多摩線
+	"1c": "text-pink-600", // 京王競馬線
+	"1d": "text-rose-600", // 京王動物線
+	"1e": "text-orange-600", // 京王高尾線
 	"2": "text-blue-600", // 相模原線
 	"3": "text-amber-600", // 井の頭線
 };
@@ -197,8 +232,10 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children }) => {
 	if (!isOpen) return null;
 
 	return (
-		<div className="fixed inset-0 flex items-center justify-center z-50 bg-black/50 backdrop-blur-xs transition-opacity"
-		onClick={onClose}>
+		<div
+			className="fixed inset-0 flex items-center justify-center z-50 bg-black/50 backdrop-blur-xs transition-opacity"
+			onClick={onClose}
+		>
 			<div
 				className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 max-h-[90vh] overflow-auto"
 				onClick={(e) => e.stopPropagation()}
@@ -226,27 +263,22 @@ const LineTimeline: React.FC<{
 	points: Point[];
 	onTrainClick: (point: Point) => void;
 }> = ({ lineCode, lineName, points, onTrainClick }) => {
-	// Group stations by line
-	const stations = useMemo(
-		() =>
-			config.positions
-				.filter((p) => {
-					if (lineCode === "1")
-						return (
-							p.kind === "駅" && p.ID.startsWith("E") && !p.ID.startsWith("E08")
-						); // 京王線
-					if (lineCode === "2")
-						return (
-							p.kind === "駅" &&
-							(p.ID.startsWith("E04") || p.ID.startsWith("E05"))
-						); // 相模原線
-					if (lineCode === "3")
-						return p.kind === "駅" && p.ID.startsWith("E08"); // 井の頭線
-					return false;
-				})
-				.sort((a, b) => a.ID.localeCompare(b.ID)),
-		[lineCode],
-	);
+	// 路線に属する駅を取得して順序に従って並べる
+	const stations = useMemo(() => {
+		const stationsForLine = Object.entries(config.stationInfo)
+			.filter(([stationId, info]) => info.line === lineCode)
+			.map(([stationId, info]) => {
+				const stationInfo = config.positions.find((p) => p.ID === stationId);
+				return {
+					...stationInfo,
+					lineInfo: info,
+					ID: stationId,
+				};
+			})
+			.sort((a, b) => a.lineInfo.order - b.lineInfo.order);
+
+		return stationsForLine;
+	}, [lineCode]);
 
 	// パフォーマンス最適化
 	const trainsByStation = useMemo(
@@ -313,6 +345,10 @@ const LineTimeline: React.FC<{
 
 									{/* Station marker */}
 									<div className="relative group">
+										{/* 地下駅の表示 */}
+										<div
+											className={`w-4 h-4 rounded-full ${station.lineInfo.iu ? "bg-white border-2 border-gray-400" : `${LINE_COLORS[lineCode]} border border-white`}`}
+										></div>
 
 										{/* Station name */}
 										<div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap text-xs font-medium">
@@ -373,7 +409,7 @@ const LineTimeline: React.FC<{
 														</div>
 
 														{train.dl !== "00" && (
-															<div className="absolute -top-3 -left-3 w-5 h-5 rounded-full flex items-center justify-center text-[20px] font-bold bg-black text-red-600">
+															<div className="absolute -top-3 -left-3 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold bg-black text-red-600">
 																{train.dl}分
 															</div>
 														)}
@@ -410,9 +446,22 @@ const TrainDetailModal: React.FC<{
 	};
 	const station = config.positions.find((p) => p.ID === train.stationId);
 	const direction = DIRECTION_MAP[train.ki] || "不明";
-	const line = config.lines.find((l) =>
-		(l.kubun === station?.ID.charAt(0)) === "E" ? "KO" : "IN",
-	) || { name: "不明" };
+
+	// 駅の路線情報から該当する路線を探す
+	let line = { name: "不明" };
+	if (station) {
+		const stationLineInfo = config.stationInfo[station.ID];
+		if (stationLineInfo) {
+			const lineDetail = LINE_DETAILS[stationLineInfo.line];
+			line = config.lines.find((l) => l.code === lineDetail?.mainLine) || {
+				name: "不明",
+			};
+		} else {
+			line = config.lines.find((l) =>
+				(l.kubun === station.ID.charAt(0)) === "E" ? "KO" : "IN",
+			) || { name: "不明" };
+		}
+	}
 
 	// Find transfer information
 	const stationCode = station?.ID.substring(1);
@@ -550,24 +599,43 @@ const StatsBar: React.FC<{ trafficData: z.infer<typeof TrafficSchema> }> = ({
 	);
 };
 
+// 路線ごとの電車情報を取得するためのフィルタリング関数
+const getPointsForLine = (
+	traffic: z.infer<typeof TrafficSchema>,
+	lineCode: string,
+) => {
+	// stationInfoから指定された路線の駅IDを取得
+	const stationIds = Object.entries(config.stationInfo)
+		.filter(([_, info]) => info.line === lineCode)
+		.map(([id, _]) => id);
+
+	// 該当する駅にいる電車を取得
+	return traffic.TS.filter((station) =>
+		stationIds.includes(station.id),
+	).flatMap((st) => st.ps.map((p) => ({ ...p, stationId: st.id })));
+};
+
 // Main App component
 export const TrafficApp: React.FC = () => {
 	const traffic = useTraffic();
 	const [selectedTrain, setSelectedTrain] = useState<Point | null>(null);
 	const [isModalOpen, setIsModalOpen] = useState(false);
 
-	// Group points by line
-	const keioPoints: Point[] = traffic.TS.filter(
-		(station) => station.id.startsWith("E") && !station.id.startsWith("E08"),
-	).flatMap((st) => st.ps.map((p) => ({ ...p, stationId: st.id })));
+	// 路線ごとに電車情報を取得
+	const keioMainPoints = useMemo(
+		() => getPointsForLine(traffic, "1a"),
+		[traffic],
+	);
 
-	const sagamiharaPoints: Point[] = traffic.TS.filter(
-		(station) => station.id.startsWith("E04") || station.id.startsWith("E05"),
-	).flatMap((st) => st.ps.map((p) => ({ ...p, stationId: st.id })));
+	const keioTamaPoints = useMemo(
+		() => getPointsForLine(traffic, "1b"),
+		[traffic],
+	);
 
-	const inokashiraPoints: Point[] = traffic.TS.filter((station) =>
-		station.id.startsWith("E08"),
-	).flatMap((st) => st.ps.map((p) => ({ ...p, stationId: st.id })));
+	const inokashiraPoints = useMemo(
+		() => getPointsForLine(traffic, "3"),
+		[traffic],
+	);
 
 	const handleTrainClick = (train: Point) => {
 		setSelectedTrain(train);
@@ -589,16 +657,16 @@ export const TrafficApp: React.FC = () => {
 
 			<div className="space-y-6">
 				<LineTimeline
-					lineCode="1"
-					lineName="京王線"
-					points={keioPoints}
+					lineCode="1a"
+					lineName="京王本線"
+					points={keioMainPoints}
 					onTrainClick={handleTrainClick}
 				/>
 
 				<LineTimeline
-					lineCode="2"
-					lineName="相模原線"
-					points={sagamiharaPoints}
+					lineCode="1b"
+					lineName="京王多摩線"
+					points={keioTamaPoints}
 					onTrainClick={handleTrainClick}
 				/>
 
