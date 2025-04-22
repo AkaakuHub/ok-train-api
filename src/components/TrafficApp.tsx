@@ -312,14 +312,6 @@ const LineTimeline: React.FC<{
 
 									{/* Station marker */}
 									<div className="relative group">
-										<div
-											className={`w-6 h-6 rounded-full bg-white border-2 ${LINE_TEXT_COLORS[lineCode]} border-current flex items-center justify-center z-10`}
-										>
-											<IconMapPin
-												size={14}
-												className={LINE_TEXT_COLORS[lineCode]}
-											/>
-										</div>
 
 										{/* Station name */}
 										<div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap text-xs font-medium">
@@ -331,7 +323,7 @@ const LineTimeline: React.FC<{
 											const service = config.syasyu.find(
 												(s) => s.code === train.sy_tr,
 											) || { name: "", iconname: "" };
-											const isInbound = train.ki === "1"; // 上り
+											const isInbound = train.ki === "0"; // 上り
 
 											return (
 												<div
@@ -356,7 +348,7 @@ const LineTimeline: React.FC<{
 															className={`absolute ${isInbound ? "right-full" : "left-full"} top-1/2 transform -translate-y-1/2 flex items-center`}
 														>
 															<div
-																className={`text-gray-300 animate-pulse flex ${isInbound ? "flex-row-reverse" : "flex-row"}`}
+																className={`text-gray-900 animate-pulse flex ${isInbound ? "flex-row-reverse" : "flex-row"}`}
 															>
 																{isInbound ? (
 																	<IconChevronLeft
@@ -378,6 +370,12 @@ const LineTimeline: React.FC<{
 														>
 															{service.iconname}
 														</div>
+
+														{train.dl !== "00" && (
+															<div className="absolute -top-3 -left-3 w-5 h-5 rounded-full flex items-center justify-center text-[20px] font-bold bg-black text-red-600">
+																{train.dl}分
+															</div>
+														)}
 													</div>
 												</div>
 											);
