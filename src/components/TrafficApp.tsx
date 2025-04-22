@@ -197,14 +197,15 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children }) => {
 	if (!isOpen) return null;
 
 	return (
-		<div className="fixed inset-0 flex items-center justify-center z-50 bg-black/50 backdrop-blur-sm transition-opacity">
+		<div className="fixed inset-0 flex items-center justify-center z-50 bg-black/50 backdrop-blur-xs transition-opacity"
+		onClick={onClose}>
 			<div
 				className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 max-h-[90vh] overflow-auto"
 				onClick={(e) => e.stopPropagation()}
 			>
 				<div className="p-6 relative">
 					<button
-						className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
+						className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
 						onClick={onClose}
 					>
 						<IconX size={24} />
