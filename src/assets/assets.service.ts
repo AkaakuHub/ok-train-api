@@ -69,6 +69,7 @@ export class AssetsService {
     if (now - versionInfo.checkedAt < oneWeek && versionInfo.version) {
       return; // 1週間以内なら何もしない
     }
+    console.log("Checking for updates...");
     // system.json取得
     const sysUrl = `${SYSTEM_JSON_URL}?ver=${now}`;
     const sysRes = await axios.get(sysUrl);
