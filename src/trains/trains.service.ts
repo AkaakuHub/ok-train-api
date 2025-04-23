@@ -126,25 +126,34 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
     for (const section of connectedSections) {
       const sectionInfo = this.trafficInfo.TB.find((s) => s.id === section.ID);
       if (sectionInfo && sectionInfo.ps.length > 0) {
-        sectionInfo.ps.forEach((train) => {
+        for (const train of sectionInfo.ps) {
           const isApproaching = this.isTrainApproachingStation(
             section.ID,
             train.ki,
             stationId
           );
           if (isApproaching) {
+            const delay = train.dl === "00" ? 0 : parseInt(train.dl, 10);
+            let estimatedArrival = "--:--";
+            try {
+              estimatedArrival = await this.estimateArrivalTime(
+                train.tr.trim(),
+                stationId,
+                delay
+              );
+            } catch {}
             arrivingTrains.push({
               trainNumber: train.tr.trim(),
               type: this.getTrainTypeInfo(train.sy_tr),
               direction: train.ki === "0" ? "下り" : "上り",
               destination: this.getDestinationInfo(train.ik_tr),
-              delay: train.dl === "00" ? 0 : parseInt(train.dl, 10),
+              delay,
               fromSection: section.name,
-              estimatedArrival: this.estimateArrivalTime(train.dl),
+              estimatedArrival,
               information: train.inf || null,
             });
           }
-        });
+        }
       }
     }
     return {
@@ -172,30 +181,6 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
       (direction === "1" && sectionType === "D") ||
       (direction === "0" && sectionType === "U")
     );
-  }
-
-  /**
-   * 到着予想時刻を計算
-   */
-  private estimateArrivalTime(delayMinutes: string): string {
-    const now = new Date();
-    // TODO: 実際の距離や時刻表を反映する
-    // TODO: 本家では、予定の到着予定時刻を表示できているのでどこかから取得できるはずである
-    // 駅間から駅への到着は平均約2分と仮定
-    const estimatedMinutes = 2;
-
-    // 遅延分を追加
-    const totalMinutes =
-      estimatedMinutes +
-      (delayMinutes === "00" ? 0 : parseInt(delayMinutes, 10));
-
-    // 到着予想時刻を計算
-    now.setMinutes(now.getMinutes() + totalMinutes);
-
-    return now.toLocaleTimeString("ja-JP", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
   }
 
   /**
@@ -257,5 +242,46 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
   private formatDateTime(dt: any): string {
     if (!dt) return "Unknown";
     return `${dt.yy}-${dt.mt}-${dt.dy} ${dt.hh}:${dt.mm}:${dt.ss}`;
+  }
+
+  /**
+   * 列車IDでダイヤAPIを直接参照し、停車駅一覧・時刻表を返す
+   */
+  async getTrainDetail(trainId: string): Promise<any> {
+    // https://i.opentidkeio.jp/dia/{trainId}.json を直接取得
+    const schedule = await this.assetsService.getJson(`dia/${trainId}.json`);
+    if (!schedule || !Array.isArray(schedule.dy)) {
+      throw new NotFoundException(`Train schedule not found: ${trainId}`);
+    }
+    // dy配列を整形して返す
+    const stops = schedule.dy.map((stop: any) => ({
+      stationId: stop.st,
+      stationName: stop.sn,
+      scheduledArrival: stop.tt,
+      scheduledDeparture: stop.ht,
+      stopFlag: stop.pa, // '1'=停車, '0'=通過
+    }));
+    return {
+      trainId,
+      stops,
+    };
+  }
+
+  /**
+   * 指定駅への到着予測時刻を取得
+   */
+  async estimateArrivalTime(
+    trainId: string,
+    stationId: string,
+    delayMin: number
+  ): Promise<string> {
+    const detail = await this.getTrainDetail(trainId);
+    const stop = detail.stops.find((s) => s.stationId === stationId);
+    if (!stop) {
+      throw new NotFoundException(
+        `Station ${stationId} not on train ${trainId}`
+      );
+    }
+    return stop.estimatedArrival;
   }
 }

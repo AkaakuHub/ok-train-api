@@ -18,6 +18,18 @@ export class AssetsService {
     if (filename === "traffic_info.json") {
       return this.fetchTrafficInfo();
     }
+    // diaはダイアなので、保存しないで、ネットから取ってくるだけ。
+    if (filename.startsWith("dia/")) {
+      const trainNo = filename.replace(/^dia\//, "");
+      const url = `https://i.opentidkeio.jp/dia/${trainNo}`;
+      try {
+        const res = await axios.get(url);
+        return res.data;
+      } catch (e) {
+        this.logger.warn(`Failed to fetch dia: ${filename}: ${e}`);
+        return null;
+      }
+    }
     const assetPath = path.join(ASSETS_DIR, filename);
     if (!(await this.exists(assetPath))) {
       await this.updateAssetsIfNeeded();

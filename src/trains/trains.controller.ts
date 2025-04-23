@@ -133,4 +133,20 @@ export class TrainsController {
   getTrainArrivals(@Param("stationIdOrName") stationIdOrName: string): any {
     return this.trainsService.getTrainArrivals(stationIdOrName);
   }
+
+  @Get("detail/:trainId")
+  @ApiOperation({
+    summary: "列車IDで詳細情報を取得（現在位置・停車駅・予定到着時刻など）",
+  })
+  @ApiParam({ name: "trainId", description: "列車ID（例: 4888）" })
+  @ApiResponse({ status: 200, description: "列車詳細情報" })
+  @ApiResponse({ status: 404, description: "指定された列車が見つかりません" })
+  async getTrainDetail(@Param("trainId") trainId: string): Promise<any> {
+    try {
+      return await this.trainsService.getTrainDetail(trainId);
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      throw new Error(`列車詳細情報の取得に失敗しました: ${error.message}`);
+    }
+  }
 }
