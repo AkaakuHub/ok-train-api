@@ -1,14 +1,13 @@
-// assets.service.ts
 import { Injectable, Logger } from "@nestjs/common";
 import { promises as fs } from "fs";
 import * as path from "path";
 import axios from "axios";
 
-const ASSETS_DIR = path.resolve(__dirname, '../../assets/json');
-const VERSION_FILE = path.join(ASSETS_DIR, 'assets_version.json');
+const ASSETS_DIR = path.resolve(__dirname, "../../assets/json");
+const VERSION_FILE = path.join(ASSETS_DIR, "assets_version.json");
 const JSON_BASE_URL = "https://i.opentidkeio.jp/config/";
-const SYSTEM_JSON_URL = "https://i.opentidkeio.jp/config/system.json";
-const TRAFFIC_INFO_URL = "https://i.opentidkeio.jp/data/traffic_info.json";
+const SYSTEM_JSON_URL = JSON_BASE_URL + "system.json";
+const TRAFFIC_INFO_URL = JSON_BASE_URL + "data/traffic_info.json";
 
 @Injectable()
 export class AssetsService {
