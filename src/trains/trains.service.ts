@@ -135,13 +135,15 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
           if (isApproaching) {
             const delay = train.dl === "00" ? 0 : parseInt(train.dl, 10);
             let estimatedArrival = "--:--";
-            try {
-              estimatedArrival = await this.estimateArrivalTime(
-                train.tr.trim(),
-                stationId,
-                delay
-              );
-            } catch {}
+            // 列車のID(ex: 4899)から、dia/4899.jsonを取得して、この駅のIDから、到着予定時刻を取得する
+            const trainId = train.tr.trim();
+            const schedule = await this.getTrainDetail(trainId, delay);
+            // ここで、駅IDは先頭のアルファベットを除去し、さらに先頭の0も除去する
+            const newStationId = stationId.replace(/^E/, "").replace(/^0/, "");
+            const stop = schedule.stops.find((s) => s.stationId === newStationId);
+            if (stop) {
+              estimatedArrival = stop.estimatedArrival;
+            }
             arrivingTrains.push({
               trainNumber: train.tr.trim(),
               type: this.getTrainTypeInfo(train.sy_tr),
@@ -245,22 +247,38 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 列車IDでダイヤAPIを直接参照し、停車駅一覧・時刻表を返す
+   * 列車IDでダイヤAPIを直接参照し、停車駅一覧・時刻表・到着時刻を返す(遅延の反映はここではしない)
    */
-  async getTrainDetail(trainId: string): Promise<any> {
+  async getTrainDetail(trainId: string, delayMin?: number): Promise<any> {
     // https://i.opentidkeio.jp/dia/{trainId}.json を直接取得
     const schedule = await this.assetsService.getJson(`dia/${trainId}.json`);
     if (!schedule || !Array.isArray(schedule.dy)) {
       throw new NotFoundException(`Train schedule not found: ${trainId}`);
     }
     // dy配列を整形して返す
-    const stops = schedule.dy.map((stop: any) => ({
-      stationId: stop.st,
-      stationName: stop.sn,
-      scheduledArrival: stop.tt,
-      scheduledDeparture: stop.ht,
-      stopFlag: stop.pa, // '1'=停車, '0'=通過
-    }));
+    const stops = schedule.dy.map((stop: any) => {
+      const scheduledArrival = stop.tt;
+      let estimatedArrival = scheduledArrival;
+      if (scheduledArrival && delayMin !== undefined) {
+        const [hh, mm] = scheduledArrival.split(":").map(Number);
+        const d = new Date();
+        d.setHours(hh, mm, 0, 0);
+        d.setMinutes(d.getMinutes() + delayMin);
+        const H = d.getHours().toString().padStart(2, "0");
+        const M = d.getMinutes().toString().padStart(2, "0");
+        estimatedArrival = `${H}:${M}`;
+      } else if (!scheduledArrival) {
+        estimatedArrival = "--:--";
+      }
+      return {
+        stationId: stop.st,
+        stationName: stop.sn,
+        scheduledArrival,
+        scheduledDeparture: stop.ht,
+        stopFlag: stop.pa, // '1'=停車, '0'=通過
+        estimatedArrival,
+      };
+    });
     return {
       trainId,
       stops,
@@ -275,7 +293,7 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
     stationId: string,
     delayMin: number
   ): Promise<string> {
-    const detail = await this.getTrainDetail(trainId);
+    const detail = await this.getTrainDetail(trainId, delayMin);
     const stop = detail.stops.find((s) => s.stationId === stationId);
     if (!stop) {
       throw new NotFoundException(
