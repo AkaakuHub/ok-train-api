@@ -179,6 +179,8 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
    */
   private estimateArrivalTime(delayMinutes: string): string {
     const now = new Date();
+    // TODO: 実際の距離や時刻表を反映する
+    // TODO: 本家では、予定の到着予定時刻を表示できているのでどこかから取得できるはずである
     // 駅間から駅への到着は平均約2分と仮定
     const estimatedMinutes = 2;
 
