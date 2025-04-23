@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException, Logger, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
+import {
+  Injectable,
+  NotFoundException,
+  Logger,
+  OnModuleInit,
+  OnModuleDestroy,
+} from "@nestjs/common";
 import { TrafficInfo, TrainPoint } from "../models/traffic.model";
 import { Position } from "../models/station.model";
 import { TrainType, Destination } from "../models/config.model";
@@ -115,7 +121,7 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
     const connectedSections = this.positions.filter(
       (p) =>
         p.kind === "駅間" &&
-        (p.ID.endsWith(stationId.slice(-3)) || p.name.includes(position.name)),
+        (p.ID.endsWith(stationId.slice(-3)) || p.name.includes(position.name))
     );
     for (const section of connectedSections) {
       const sectionInfo = this.trafficInfo.TB.find((s) => s.id === section.ID);
@@ -124,7 +130,7 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
           const isApproaching = this.isTrainApproachingStation(
             section.ID,
             train.ki,
-            stationId,
+            stationId
           );
           if (isApproaching) {
             arrivingTrains.push({
@@ -155,7 +161,7 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
   private isTrainApproachingStation(
     sectionId: string,
     direction: string,
-    stationId: string,
+    stationId: string
   ): boolean {
     // 駅間IDの先頭文字で判断（U: 上り方向、D: 下り方向）
     const sectionType = sectionId.charAt(0);
@@ -212,7 +218,7 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
    */
   private findPosition(stationIdOrName: string): Position | undefined {
     return this.positions.find(
-      (p) => p.ID === stationIdOrName || p.name === stationIdOrName,
+      (p) => p.ID === stationIdOrName || p.name === stationIdOrName
     );
   }
 

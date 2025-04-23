@@ -1,19 +1,21 @@
 // assets.service.ts
-import { Injectable } from '@nestjs/common';
-import { promises as fs } from 'fs';
-import * as path from 'path';
-import axios from 'axios';
+import { Injectable, Logger } from "@nestjs/common";
+import { promises as fs } from "fs";
+import * as path from "path";
+import axios from "axios";
 
-const ASSETS_DIR = path.join(__dirname, 'assets', 'json');
-const VERSION_FILE = path.join(ASSETS_DIR, '..', 'assets_version.json');
-const JSON_BASE_URL = 'https://i.opentidkeio.jp/config/';
-const SYSTEM_JSON_URL = 'https://i.opentidkeio.jp/config/system.json';
-const TRAFFIC_INFO_URL = 'https://i.opentidkeio.jp/data/traffic_info.json';
+const ASSETS_DIR = path.resolve(__dirname, '../../assets/json');
+const VERSION_FILE = path.join(ASSETS_DIR, 'assets_version.json');
+const JSON_BASE_URL = "https://i.opentidkeio.jp/config/";
+const SYSTEM_JSON_URL = "https://i.opentidkeio.jp/config/system.json";
+const TRAFFIC_INFO_URL = "https://i.opentidkeio.jp/data/traffic_info.json";
 
 @Injectable()
 export class AssetsService {
+  private readonly logger = new Logger(AssetsService.name);
+
   async getJson(filename: string): Promise<any> {
-    if (filename === 'traffic_info.json') {
+    if (filename === "traffic_info.json") {
       return this.fetchTrafficInfo();
     }
     const assetPath = path.join(ASSETS_DIR, filename);
@@ -21,10 +23,16 @@ export class AssetsService {
       await this.updateAssetsIfNeeded();
     }
     if (!(await this.exists(assetPath))) {
-      throw new Error(`${filename} not found and could not fetch from remote.`);
+      this.logger.warn(`${filename} not found. Returning null.`);
+      return null; // ファイルが無い場合はnull返却
     }
-    const data = await fs.readFile(assetPath, 'utf-8');
-    return JSON.parse(data);
+    try {
+      const data = await fs.readFile(assetPath, "utf-8");
+      return JSON.parse(data);
+    } catch (e) {
+      this.logger.warn(`Failed to read or parse ${filename}: ${e}`);
+      return null;
+    }
   }
 
   private async fetchTrafficInfo(): Promise<any> {
@@ -35,12 +43,26 @@ export class AssetsService {
 
   private async updateAssetsIfNeeded() {
     // assets_version.jsonの存在確認・読み込み
-    let versionInfo: { version: string; checkedAt: number } = { version: '', checkedAt: 0 };
+    let versionInfo: { version: string; checkedAt: number } = {
+      version: "",
+      checkedAt: 0,
+    };
+    // ディレクトリがなければ作成
+    await this.ensureAssetsDir();
     if (await this.exists(VERSION_FILE)) {
       try {
-        const raw = await fs.readFile(VERSION_FILE, 'utf-8');
+        const raw = await fs.readFile(VERSION_FILE, "utf-8");
         versionInfo = JSON.parse(raw);
-      } catch {}
+      } catch (e) {
+        this.logger.warn(`Failed to read or parse assets_version.json: ${e}`);
+      }
+    } else {
+      // ファイルが存在しない場合は新規作成
+      try {
+        await fs.writeFile(VERSION_FILE, JSON.stringify(versionInfo), "utf-8");
+      } catch (e) {
+        this.logger.warn(`Failed to create assets_version.json: ${e}`);
+      }
     }
     const now = Date.now();
     const oneWeek = 7 * 24 * 60 * 60 * 1000;
@@ -58,30 +80,47 @@ export class AssetsService {
       await this.updateAllAssets(newVersion);
     }
     // バージョン・確認時刻を保存
-    await fs.writeFile(VERSION_FILE, JSON.stringify({ version: newVersion, checkedAt: now }), 'utf-8');
+    await fs.writeFile(
+      VERSION_FILE,
+      JSON.stringify({ version: newVersion, checkedAt: now }),
+      "utf-8"
+    );
   }
 
   private async updateAllAssets(version: string) {
     // assetsディレクトリ内のjson一覧
     const jsonFiles = [
-      'ikisaki.json',
-      'line.json',
-      'other_chg_app.json',
-      'other_chg.json',
-      'position.json',
-      'railload_chg.json',
-      'station_info.json',
-      'syasyu.json',
+      "ikisaki.json",
+      "line.json",
+      "other_chg_app.json",
+      "other_chg.json",
+      "position.json",
+      "railload_chg.json",
+      "station_info.json",
+      "syasyu.json",
       // traffic_info.jsonは除外
     ];
+    await this.ensureAssetsDir();
     for (const file of jsonFiles) {
       const url = `${JSON_BASE_URL}${file}?ver=${version}`;
       try {
         const res = await axios.get(url);
-        await fs.writeFile(path.join(ASSETS_DIR, file), JSON.stringify(res.data), 'utf-8');
+        await fs.writeFile(
+          path.join(ASSETS_DIR, file),
+          JSON.stringify(res.data),
+          "utf-8"
+        );
       } catch (e) {
-        console.warn(`Failed to fetch or write ${file}:`, e);
+        this.logger.warn(`Failed to fetch or write ${file}: ${e}`);
       }
+    }
+  }
+
+  private async ensureAssetsDir() {
+    try {
+      await fs.mkdir(ASSETS_DIR, { recursive: true });
+    } catch (e) {
+      this.logger.warn(`Failed to create assets dir: ${e}`);
     }
   }
 
