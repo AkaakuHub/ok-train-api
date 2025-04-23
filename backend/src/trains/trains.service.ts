@@ -1,12 +1,11 @@
-import { Injectable, NotFoundException, Logger } from "@nestjs/common";
+import { Injectable, NotFoundException, Logger, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
 import { TrafficInfo, TrainPoint } from "../models/traffic.model";
 import { Position } from "../models/station.model";
 import { TrainType, Destination } from "../models/config.model";
-import * as fs from "fs";
-import * as path from "path";
+import { AssetsService } from "../assets/assets.service";
 
 @Injectable()
-export class TrainsService {
+export class TrainsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TrainsService.name);
   private trafficInfo: TrafficInfo;
   private positions: Position[];
@@ -14,35 +13,33 @@ export class TrainsService {
   private destinations: Destination[];
   private lastUpdate: Date = new Date();
   private readonly updateInterval = 30000; // 30秒ごとにデータを更新
+  private intervalId: NodeJS.Timeout;
 
-  constructor() {
-    this.loadAllData();
+  constructor(private readonly assetsService: AssetsService) {}
+
+  async onModuleInit() {
+    await this.loadAllData();
     this.setupPeriodicUpdate();
+  }
+
+  async onModuleDestroy() {
+    if (this.intervalId) clearInterval(this.intervalId);
   }
 
   /**
    * すべてのデータをロードする
    */
-  private loadAllData(): void {
+  private async loadAllData(): Promise<void> {
     try {
-      // 各種JSONファイルをロード
-      this.trafficInfo = this.loadJsonFile<TrafficInfo>("traffic_info.json");
-
-      const positionData = this.loadJsonFile<{ pos: Position[] }>(
-        "position.json",
-      );
+      // traffic_info.jsonは毎回webから取得
+      this.trafficInfo = await this.assetsService.getJson("traffic_info.json");
+      // 他のjsonはassets/json/から取得
+      const positionData = await this.assetsService.getJson("position.json");
       this.positions = positionData.pos;
-
-      const syasyuData = this.loadJsonFile<{ syasyu: TrainType[] }>(
-        "syasyu.json",
-      );
+      const syasyuData = await this.assetsService.getJson("syasyu.json");
       this.trainTypes = syasyuData.syasyu;
-
-      const ikisakiData = this.loadJsonFile<{ ikisaki: Destination[] }>(
-        "ikisaki.json",
-      );
+      const ikisakiData = await this.assetsService.getJson("ikisaki.json");
       this.destinations = ikisakiData.ikisaki;
-
       this.lastUpdate = new Date();
       this.logger.log("All data loaded successfully");
     } catch (error) {
@@ -51,27 +48,10 @@ export class TrainsService {
     }
   }
 
-  /**
-   * JSONファイルを読み込む
-   */
-  private loadJsonFile<T>(filename: string): T {
-    try {
-      const filePath = path.join(process.cwd(), "src/assets", filename);
-      const fileContent = fs.readFileSync(filePath, "utf8");
-      return JSON.parse(fileContent);
-    } catch (error) {
-      this.logger.error(`Failed to load ${filename}: ${error.message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * 定期的なデータ更新処理をセットアップ
-   */
   private setupPeriodicUpdate(): void {
-    setInterval(() => {
+    this.intervalId = setInterval(async () => {
       try {
-        this.loadAllData();
+        await this.loadAllData();
         this.logger.log("Data updated");
       } catch (error) {
         this.logger.error(`Failed to update data: ${error.message}`);
@@ -96,13 +76,11 @@ export class TrainsService {
   /**
    * 指定した駅の列車情報を取得
    */
-  getTrainsForStation(stationIdOrName: string): any {
-    // 駅IDまたは名前から駅情報を検索
+  async getTrainsForStation(stationIdOrName: string): Promise<any> {
     const position = this.findPosition(stationIdOrName);
     if (!position) {
       throw new NotFoundException(`Station not found: ${stationIdOrName}`);
     }
-
     const result = {
       stationId: position.ID,
       stationName: position.name,
@@ -110,51 +88,39 @@ export class TrainsService {
       updatedAt: this.formatDateTime(this.trafficInfo.up[0]?.dt[0]),
       trains: [],
     };
-
-    // 駅か駅間かで取得方法を分ける
     if (position.kind === "駅") {
-      // 駅の場合
       const stationInfo = this.trafficInfo.TS.find((s) => s.id === position.ID);
       if (stationInfo) {
         result.trains = this.formatTrains(stationInfo.ps);
       }
     } else if (position.kind === "駅間") {
-      // 駅間の場合
       const sectionInfo = this.trafficInfo.TB.find((s) => s.id === position.ID);
       if (sectionInfo) {
         result.trains = this.formatTrains(sectionInfo.ps);
       }
     }
-
     return result;
   }
 
   /**
    * 列車到着予測情報を取得
    */
-  getTrainArrivals(stationIdOrName: string): any {
+  async getTrainArrivals(stationIdOrName: string): Promise<any> {
     const position = this.findPosition(stationIdOrName);
     if (!position || position.kind !== "駅") {
       throw new NotFoundException(`Invalid station: ${stationIdOrName}`);
     }
-
     const stationId = position.ID;
     const arrivingTrains = [];
-
-    // 接続する駅間を探す
     const connectedSections = this.positions.filter(
       (p) =>
         p.kind === "駅間" &&
-        // 接続している駅間は、IDの末尾が駅IDの末尾と一致する
         (p.ID.endsWith(stationId.slice(-3)) || p.name.includes(position.name)),
     );
-
-    // 駅間から到着予定の列車を検索
-    connectedSections.forEach((section) => {
+    for (const section of connectedSections) {
       const sectionInfo = this.trafficInfo.TB.find((s) => s.id === section.ID);
       if (sectionInfo && sectionInfo.ps.length > 0) {
         sectionInfo.ps.forEach((train) => {
-          // 列車の方向が駅に向かっているか確認
           const isApproaching = this.isTrainApproachingStation(
             section.ID,
             train.ki,
@@ -174,8 +140,7 @@ export class TrainsService {
           }
         });
       }
-    });
-
+    }
     return {
       stationId: position.ID,
       stationName: position.name,

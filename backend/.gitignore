@@ -54,4 +54,4 @@ pnpm-lock.yaml
 /.history
 
 dist
-src/assets/
+src/assets/json
