@@ -1,25 +1,26 @@
 import { Injectable, NotFoundException, Logger } from "@nestjs/common";
 import { Position } from "../models/station.model";
-import * as fs from "fs";
-import * as path from "path";
+import { AssetsService } from "src/assets/assets.service";
 
 @Injectable()
 export class StationsService {
   private readonly logger = new Logger(StationsService.name);
   private positions: Position[];
 
-  constructor() {
-    this.loadStations();
+  constructor(private readonly assetsService: AssetsService) {
+    // loadStations()はonModuleInitで呼ぶ
+  }
+
+  async onModuleInit() {
+    await this.loadStations();
   }
 
   /**
    * 駅情報を読み込む
    */
-  private loadStations(): void {
+  private async loadStations(): Promise<void> {
     try {
-      const filePath = path.join(process.cwd(), "src/assets", "position.json");
-      const fileContent = fs.readFileSync(filePath, "utf8");
-      const positionData = JSON.parse(fileContent);
+      const positionData = await this.assetsService.getJson("position.json");
       this.positions = positionData.pos;
       this.logger.log("Station data loaded successfully");
     } catch (error) {
