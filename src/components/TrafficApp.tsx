@@ -259,242 +259,257 @@ type Point = z.infer<typeof TrafficPointSchema> & { stationId: string };
 
 // 分岐点を検出するユーティリティ関数
 const detectBranches = (lineCode: string) => {
-  // 分岐点を格納するオブジェクト
-  const branches: Record<string, string[]> = {};
-  
-  // lineCodeを含む駅を取得
-  const lineStations = Object.entries(config.stationInfo)
-    .filter(([_, info]) => info.line.includes(lineCode));
-  
-  // 分岐点を探す
-  lineStations.forEach(([stationId, info]) => {
-    // 2つ以上の路線を持つ駅は分岐点
-    if (info.line.length > 1) {
-      // 分岐先の路線（自分自身を除く）
-      const branchLines = info.line.filter(l => l !== lineCode);
-      
-      if (branchLines.length > 0) {
-        branches[stationId] = branchLines;
-      }
-    }
-  });
-  
-  return branches;
+	// 分岐点を格納するオブジェクト
+	const branches: Record<string, string[]> = {};
+
+	// lineCodeを含む駅を取得
+	const lineStations = Object.entries(config.stationInfo).filter(([_, info]) =>
+		info.line.includes(lineCode),
+	);
+
+	// 分岐点を探す
+	lineStations.forEach(([stationId, info]) => {
+		// 2つ以上の路線を持つ駅は分岐点
+		if (info.line.length > 1) {
+			// 分岐先の路線（自分自身を除く）
+			const branchLines = info.line.filter((l) => l !== lineCode);
+
+			if (branchLines.length > 0) {
+				branches[stationId] = branchLines;
+			}
+		}
+	});
+
+	return branches;
 };
 
 // 分岐線上の駅を取得する関数
 const getBranchStations = (branchLine: string) => {
-  return Object.entries(config.stationInfo)
-    .filter(([_, info]) => info.line.includes(branchLine) && !info.line.includes("1a"))
-    .map(([id, _]) => id)
-    .sort((a, b) => config.stationInfo[a].order - config.stationInfo[b].order);
+	return Object.entries(config.stationInfo)
+		.filter(
+			([_, info]) =>
+				info.line.includes(branchLine) && !info.line.includes("1a"),
+		)
+		.map(([id, _]) => id)
+		.sort((a, b) => config.stationInfo[a].order - config.stationInfo[b].order);
 };
 
 // LineTimelineコンポーネントの修正
 const LineTimeline: React.FC<{
-  lineCode: string;
-  lineName: string;
-  points: Point[];
-  onTrainClick: (point: Point) => void;
+	lineCode: string;
+	lineName: string;
+	points: Point[];
+	onTrainClick: (point: Point) => void;
 }> = ({ lineCode, lineName, points, onTrainClick }) => {
-  // 路線に属する駅を取得して順序に従って並べる
-  const stations = useMemo(() => {
-    const stationsForLine = Object.entries(config.stationInfo)
-      .filter(([stationId, info]) => info.line.includes(lineCode))
-      .map(([stationId, info]) => {
-        const stationInfo = config.positions.find((p) => p.ID === stationId);
-        return {
-          ...stationInfo,
-          lineInfo: info,
-          ID: stationId,
-        };
-      })
-      .sort((a, b) => a.lineInfo.order - b.lineInfo.order);
+	// 路線に属する駅を取得して順序に従って並べる
+	const stations = useMemo(() => {
+		const stationsForLine = Object.entries(config.stationInfo)
+			.filter(([stationId, info]) => info.line.includes(lineCode))
+			.map(([stationId, info]) => {
+				const stationInfo = config.positions.find((p) => p.ID === stationId);
+				return {
+					...stationInfo,
+					lineInfo: info,
+					ID: stationId,
+				};
+			})
+			.sort((a, b) => a.lineInfo.order - b.lineInfo.order);
 
-    return stationsForLine;
-  }, [lineCode]);
+		return stationsForLine;
+	}, [lineCode]);
 
-  // 分岐点を検出
-  const branches = useMemo(() => detectBranches(lineCode), [lineCode]);
+	// 分岐点を検出
+	const branches = useMemo(() => detectBranches(lineCode), [lineCode]);
 
-  // パフォーマンス最適化
-  const trainsByStation = useMemo(
-    () =>
-      points.reduce<Record<string, Point[]>>((acc, point) => {
-        if (!acc[point.stationId]) {
-          acc[point.stationId] = [];
-        }
-        acc[point.stationId].push(point);
-        return acc;
-      }, {}),
-    [points],
-  );
+	// パフォーマンス最適化
+	const trainsByStation = useMemo(
+		() =>
+			points.reduce<Record<string, Point[]>>((acc, point) => {
+				if (!acc[point.stationId]) {
+					acc[point.stationId] = [];
+				}
+				acc[point.stationId].push(point);
+				return acc;
+			}, {}),
+		[points],
+	);
 
-  // Get the reference to scroll horizontally
-  const timelineRef = useRef<HTMLDivElement>(null);
+	// Get the reference to scroll horizontally
+	const timelineRef = useRef<HTMLDivElement>(null);
 
-  return (
-    <div className="mb-8">
-      <div className="flex items-center mb-2">
-        <div
-          className={`w-3 h-3 rounded-full ${LINE_COLORS[lineCode]} mr-2`}
-        ></div>
-        <h2 className="text-lg font-bold">{lineName}</h2>
-      </div>
+	return (
+		<div className="mb-8">
+			<div className="flex items-center mb-2">
+				<div
+					className={`w-3 h-3 rounded-full ${LINE_COLORS[lineCode]} mr-2`}
+				></div>
+				<h2 className="text-lg font-bold">{lineName}</h2>
+			</div>
 
-      <div
-        className={`rounded-xl ${LINE_BG_COLORS[lineCode]} p-4 border border-gray-200 shadow-sm`}
-      >
-        <div className="flex mb-4 overflow-x-auto gap-4 no-scrollbar">
-          <button
-            className="flex items-center justify-center p-2 bg-white rounded-full shadow-sm text-gray-500 hover:bg-gray-50"
-            onClick={() => {
-              if (timelineRef.current) {
-                timelineRef.current.scrollLeft -= 300;
-              }
-            }}
-          >
-            <IconChevronLeft size={20} />
-          </button>
+			<div
+				className={`rounded-xl ${LINE_BG_COLORS[lineCode]} p-4 border border-gray-200 shadow-sm`}
+			>
+				<div className="flex mb-4 overflow-x-auto gap-4 no-scrollbar">
+					<button
+						className="flex items-center justify-center p-2 bg-white rounded-full shadow-sm text-gray-500 hover:bg-gray-50"
+						onClick={() => {
+							if (timelineRef.current) {
+								timelineRef.current.scrollLeft -= 300;
+							}
+						}}
+					>
+						<IconChevronLeft size={20} />
+					</button>
 
-          <button
-            className="flex items-center justify-center p-2 bg-white rounded-full shadow-sm text-gray-500 hover:bg-gray-50"
-            onClick={() => {
-              if (timelineRef.current) {
-                timelineRef.current.scrollLeft += 300;
-              }
-            }}
-          >
-            <IconChevronRight size={20} />
-          </button>
-        </div>
+					<button
+						className="flex items-center justify-center p-2 bg-white rounded-full shadow-sm text-gray-500 hover:bg-gray-50"
+						onClick={() => {
+							if (timelineRef.current) {
+								timelineRef.current.scrollLeft += 300;
+							}
+						}}
+					>
+						<IconChevronRight size={20} />
+					</button>
+				</div>
 
-        <div ref={timelineRef} className="relative overflow-x-auto ">
-          <div className="flex items-center min-w-max h-80 py-20">
-            {/* Station timeline */}
-            <div className="flex items-center">
-              {stations.map((station, index) => (
-                <div key={station.ID} className="flex flex-col items-center">
-                  {/* Station connection line */}
-                  {index > 0 && (
-                    <div className={`h-1 w-20 ${LINE_COLORS[lineCode]}`}></div>
-                  )}
+				<div ref={timelineRef} className="relative overflow-x-auto ">
+					<div className="flex items-center min-w-max h-80 py-20">
+						{/* Station timeline */}
+						<div className="flex items-center">
+							{stations.map((station, index) => (
+								<div key={station.ID} className="flex flex-col items-center">
+									{/* Station connection line */}
+									{index > 0 && (
+										<div className={`h-1 w-20 ${LINE_COLORS[lineCode]}`}></div>
+									)}
 
-                  {/* Station marker - 分岐点は視覚的に区別 */}
-                  <div className="relative group">
-                    {/* 地下駅の表示または分岐駅の表示 */}
-                    <div
-                      className={`w-4 h-4 rounded-full 
-                        ${station.lineInfo.iu 
-                          ? "bg-white border-2 border-gray-400" 
-                          : branches[station.ID] 
-                            ? `${LINE_COLORS[lineCode]} border-2 border-white ring-2 ring-gray-300` 
-                            : `${LINE_COLORS[lineCode]} border border-white`}`}
-                    ></div>
+									{/* Station marker - 分岐点は視覚的に区別 */}
+									<div className="relative group">
+										{/* 地下駅の表示または分岐駅の表示 */}
+										<div
+											className={`w-4 h-4 rounded-full 
+                        ${
+													station.lineInfo.iu
+														? "bg-white border-2 border-gray-400"
+														: branches[station.ID]
+															? `${LINE_COLORS[lineCode]} border-2 border-white ring-2 ring-gray-300`
+															: `${LINE_COLORS[lineCode]} border border-white`
+												}`}
+										></div>
 
-                    {/* 分岐アイコン表示 */}
-                    {branches[station.ID] && (
-                      <div className="absolute -top-4 -right-4 w-5 h-5 bg-white rounded-full border border-gray-300 flex items-center justify-center">
-                        <IconArrowRight size={12} className="text-gray-600" />
-                      </div>
-                    )}
+										{/* 分岐アイコン表示 */}
+										{branches[station.ID] && (
+											<div className="absolute -top-4 -right-4 w-5 h-5 bg-white rounded-full border border-gray-300 flex items-center justify-center">
+												<IconArrowRight size={12} className="text-gray-600" />
+											</div>
+										)}
 
-                    {/* Station name */}
-                    <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap text-xs font-medium">
-                      {station.name}
-                    </div>
+										{/* Station name */}
+										<div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap text-xs font-medium">
+											{station.name}
+										</div>
 
-                    {/* Trains at this station */}
-                    {trainsByStation[station.ID]?.map((train, trainIndex) => {
-                      const service = config.syasyu.find(
-                        (s) => s.code === train.sy_tr,
-                      ) || { name: "", iconname: "" };
-                      const isInbound = train.ki === "0"; // 上り
+										{/* Trains at this station */}
+										{trainsByStation[station.ID]?.map((train, trainIndex) => {
+											const service = config.syasyu.find(
+												(s) => s.code === train.sy_tr,
+											) || { name: "", iconname: "" };
+											const isInbound = train.ki === "0"; // 上り
 
-                      return (
-                        <div
-                          key={`${train.tr}-${trainIndex}`}
-                          className={`absolute ${isInbound ? "-top-16" : "top-8"} left-1/2 transform -translate-x-1/2`}
-                          onClick={() => onTrainClick(train)}
-                        >
-                          <div
-                            className={`
+											return (
+												<div
+													key={`${train.tr}-${trainIndex}`}
+													className={`absolute ${isInbound ? "-top-16" : "top-8"} left-1/2 transform -translate-x-1/2`}
+													onClick={() => onTrainClick(train)}
+												>
+													<div
+														className={`
                             flex items-center justify-center
                             w-16 h-7 rounded-full bg-white shadow-md border
                             cursor-pointer hover:bg-gray-50 transition-colors
                             relative
                           `}
-                          >
-                            <span className="text-xs font-bold">
-                              {train.tr.trim()}
-                            </span>
+													>
+														<span className="text-xs font-bold">
+															{train.tr.trim()}
+														</span>
 
-                            {/* Direction indicator with animation */}
-                            <div
-                              className={`absolute ${isInbound ? "right-full" : "left-full"} top-1/2 transform -translate-y-1/2 flex items-center`}
-                            >
-                              <div
-                                className={`text-gray-900 animate-pulse flex ${isInbound ? "flex-row-reverse" : "flex-row"}`}
-                              >
-                                {isInbound ? (
-                                  <IconChevronLeft
-                                    size={16}
-                                    className="opacity-80"
-                                  />
-                                ) : (
-                                  <IconChevronRight
-                                    size={16}
-                                    className="opacity-80"
-                                  />
-                                )}
-                              </div>
-                            </div>
+														{/* Direction indicator with animation */}
+														<div
+															className={`absolute ${isInbound ? "right-full" : "left-full"} top-1/2 transform -translate-y-1/2 flex items-center`}
+														>
+															<div
+																className={`text-gray-900 animate-pulse flex ${isInbound ? "flex-row-reverse" : "flex-row"}`}
+															>
+																{isInbound ? (
+																	<IconChevronLeft
+																		size={16}
+																		className="opacity-80"
+																	/>
+																) : (
+																	<IconChevronRight
+																		size={16}
+																		className="opacity-80"
+																	/>
+																)}
+															</div>
+														</div>
 
-                            {/* Service type badge */}
-                            <div
-                              className={`absolute -top-3 -right-3 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${SERVICE_COLORS[train.sy_tr] || "bg-gray-500 text-white"}`}
-                            >
-                              {service.iconname}
-                            </div>
+														{/* Service type badge */}
+														<div
+															className={`absolute -top-3 -right-3 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${SERVICE_COLORS[train.sy_tr] || "bg-gray-500 text-white"}`}
+														>
+															{service.iconname}
+														</div>
 
-                            {train.dl !== "00" && (
-                              <div className="absolute -top-3 -left-3 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold bg-black text-red-600">
-                                {train.dl}分
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  
-                  {/* 分岐線の表示 */}
-                  {branches[station.ID] && (
-                    <div className="relative mt-6">
-                      <div className="absolute left-0 transform -translate-x-1/2 -translate-y-1/2">
-                        <div className="text-xs font-medium text-gray-500 mb-1">分岐</div>
-                        <div className="flex flex-col gap-1">
-                          {branches[station.ID].map(branchLine => {
-                            const branchLineDetails = LINE_DETAILS[branchLine];
-                            return (
-                              <div key={branchLine} className="flex items-center gap-1">
-                                <div className={`w-2 h-2 rounded-full ${LINE_COLORS[branchLine]}`}></div>
-                                <span className="text-xs font-medium">{branchLineDetails?.name || branchLine}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+														{train.dl !== "00" && (
+															<div className="absolute -top-3 -left-3 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold bg-black text-red-600">
+																{train.dl}分
+															</div>
+														)}
+													</div>
+												</div>
+											);
+										})}
+									</div>
+
+									{/* 分岐線の表示 */}
+									{branches[station.ID] && (
+										<div className="relative mt-6">
+											<div className="absolute left-0 transform -translate-x-1/2 -translate-y-1/2">
+												<div className="text-xs font-medium text-gray-500 mb-1">
+													分岐
+												</div>
+												<div className="flex flex-col gap-1">
+													{branches[station.ID].map((branchLine) => {
+														const branchLineDetails = LINE_DETAILS[branchLine];
+														return (
+															<div
+																key={branchLine}
+																className="flex items-center gap-1"
+															>
+																<div
+																	className={`w-2 h-2 rounded-full ${LINE_COLORS[branchLine]}`}
+																></div>
+																<span className="text-xs font-medium">
+																	{branchLineDetails?.name || branchLine}
+																</span>
+															</div>
+														);
+													})}
+												</div>
+											</div>
+										</div>
+									)}
+								</div>
+							))}
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	);
 };
 
 // Train detail modal component
@@ -670,41 +685,398 @@ const StatsBar: React.FC<{ trafficData: z.infer<typeof TrafficSchema> }> = ({
 
 // 路線ごとの電車情報を取得するためのフィルタリング関数
 const getPointsForLine = (
-  traffic: z.infer<typeof TrafficSchema>,
-  lineCode: string,
+	traffic: z.infer<typeof TrafficSchema>,
+	lineCode: string,
 ) => {
-  // stationInfoから指定された路線の駅IDを取得
-  const stationIds = Object.entries(config.stationInfo)
-    .filter(([_, info]) => info.line.includes(lineCode))
-    .map(([id, _]) => id);
+	// stationInfoから指定された路線の駅IDを取得
+	const stationIds = Object.entries(config.stationInfo)
+		.filter(([_, info]) => info.line.includes(lineCode))
+		.map(([id, _]) => id);
 
-  // 該当する駅にいる電車を取得
-  return traffic.TS.filter((station) =>
-    stationIds.includes(station.id),
-  ).flatMap((st) => st.ps.map((p) => ({ ...p, stationId: st.id })));
+	// 該当する駅にいる電車を取得
+	return traffic.TS.filter((station) =>
+		stationIds.includes(station.id),
+	).flatMap((st) => st.ps.map((p) => ({ ...p, stationId: st.id })));
 };
 
-// Main App component
+// NetworkMapコンポーネント - すべての路線を統合して表示する
+const NetworkMap: React.FC<{
+	points: Point[];
+	onTrainClick: (point: Point) => void;
+}> = ({ points, onTrainClick }) => {
+	const mapRef = useRef<HTMLDivElement>(null);
+
+	// すべての駅情報を取得して座標計算用のデータを準備
+	const stationsData = useMemo(() => {
+		// 駅IDをキーとした駅の情報マップ
+		const stationsMap: Record<
+			string,
+			{
+				position: { x: number; y: number };
+				lines: string[];
+				station: any;
+				trainCount: number;
+			}
+		> = {};
+
+		// 路線別の駅のグループ
+		const lineGroups: Record<string, string[]> = {
+			"1a": [], // 京王本線
+			"1b": [], // 京王多摩線
+			"1c": [], // 京王競馬線
+			"1d": [], // 京王動物線
+			"1e": [], // 京王高尾線
+			"3": [], // 井の頭線
+		};
+
+		// 駅IDと路線情報を収集
+		Object.entries(config.stationInfo).forEach(([stationId, info]) => {
+			// 駅の詳細情報
+			const stationDetail = config.positions.find((p) => p.ID === stationId);
+			if (stationDetail) {
+				// この駅が所属する路線
+				info.line.forEach((line) => {
+					if (lineGroups[line]) {
+						lineGroups[line].push(stationId);
+					}
+				});
+
+				// 駅情報を保存
+				stationsMap[stationId] = {
+					position: { x: 0, y: 0 }, // 初期値、後で計算
+					lines: info.line,
+					station: stationDetail,
+					trainCount: 0,
+				};
+			}
+		});
+
+		// 各路線別に駅を順序（order）でソート
+		Object.keys(lineGroups).forEach((line) => {
+			lineGroups[line].sort(
+				(a, b) => config.stationInfo[a].order - config.stationInfo[b].order,
+			);
+		});
+
+		// 座標を計算
+		const baseY = 100; // 最初の路線のY座標
+		const lineSpacing = 150; // 路線間の間隔
+		const stationSpacing = 100; // 駅間の間隔
+
+		// 路線ごとに駅の座標を計算
+		let currentY = baseY;
+
+		// 京王本線（基準路線）の座標を設定
+		lineGroups["1a"].forEach((stationId, index) => {
+			stationsMap[stationId].position.x = 150 + index * stationSpacing;
+			stationsMap[stationId].position.y = currentY;
+		});
+
+		// 京王多摩線は調布駅から分岐
+		const tamaSplitStation = "E016"; // 調布駅
+		const tamaStartX = stationsMap[tamaSplitStation]?.position.x || 150;
+		const tamaStartY = stationsMap[tamaSplitStation]?.position.y || currentY;
+		currentY += lineSpacing;
+
+		lineGroups["1b"].forEach((stationId, index) => {
+			if (stationId === tamaSplitStation) return; // 分岐駅はスキップ
+
+			// 最初の駅は分岐駅に接続
+			if (index === 0) {
+				stationsMap[stationId].position.x = tamaStartX + stationSpacing;
+				stationsMap[stationId].position.y = tamaStartY + 30; // 少し下に
+			} else {
+				stationsMap[stationId].position.x =
+					tamaStartX + stationSpacing + index * stationSpacing;
+				stationsMap[stationId].position.y = currentY;
+			}
+		});
+
+		// 井の頭線は明大前駅から分岐
+		const inokashiraSplitStation = "E004"; // 明大前駅
+		const inokashiraStartX =
+			stationsMap[inokashiraSplitStation]?.position.x || 150;
+		const inokashiraStartY =
+			stationsMap[inokashiraSplitStation]?.position.y || currentY;
+		currentY += lineSpacing;
+
+		// 井の頭線は明大前から左に向かって伸びる
+		let inokashiraX = inokashiraStartX;
+		lineGroups["3"].forEach((stationId, index) => {
+			if (stationId === inokashiraSplitStation) return; // 分岐駅はスキップ
+
+			if (index === 0) {
+				// 井の頭線の最初の駅（神泉）は明大前より左に配置
+				inokashiraX -= stationSpacing;
+				stationsMap[stationId].position.x = inokashiraX;
+				stationsMap[stationId].position.y = inokashiraStartY + 30; // 少し下に
+			} else if (stationId === "E088") {
+				// 明大前駅（井の頭線）
+				stationsMap[stationId].position.x = inokashiraStartX;
+				stationsMap[stationId].position.y = currentY;
+			} else if (index < 8) {
+				// 最初の数駅は左に向かう
+				inokashiraX -= stationSpacing;
+				stationsMap[stationId].position.x = inokashiraX;
+				stationsMap[stationId].position.y = currentY;
+			} else {
+				// 渋谷方面は左下に
+				inokashiraX -= stationSpacing;
+				stationsMap[stationId].position.x = inokashiraX;
+				stationsMap[stationId].position.y = currentY;
+			}
+		});
+
+		// 高尾線（北野駅から分岐）
+		const takaohSplitStation = "E031"; // 北野駅
+		if (stationsMap[takaohSplitStation]) {
+			const takaoStartX = stationsMap[takaohSplitStation].position.x;
+			const takaoStartY = stationsMap[takaohSplitStation].position.y;
+
+			lineGroups["1e"].forEach((stationId, index) => {
+				if (stationId === takaohSplitStation) return; // 分岐駅はスキップ
+
+				if (stationsMap[stationId]) {
+					stationsMap[stationId].position.x =
+						takaoStartX + (index + 1) * stationSpacing;
+					stationsMap[stationId].position.y = takaoStartY + 30; // 少し下に
+				}
+			});
+		}
+
+		// 競馬線（東府中駅から分岐）
+		const raceSplitStation = "E021"; // 東府中駅
+		if (stationsMap[raceSplitStation]) {
+			const raceStartX = stationsMap[raceSplitStation].position.x;
+			const raceStartY = stationsMap[raceSplitStation].position.y;
+
+			lineGroups["1c"].forEach((stationId, index) => {
+				if (stationId === raceSplitStation) return; // 分岐駅はスキップ
+
+				if (stationsMap[stationId]) {
+					stationsMap[stationId].position.x = raceStartX;
+					stationsMap[stationId].position.y = raceStartY + 40; // 下に
+				}
+			});
+		}
+
+		// 動物園線（高幡不動駅から分岐）
+		const zooSplitStation = "E027"; // 高幡不動駅
+		if (stationsMap[zooSplitStation]) {
+			const zooStartX = stationsMap[zooSplitStation].position.x;
+			const zooStartY = stationsMap[zooSplitStation].position.y;
+
+			lineGroups["1d"].forEach((stationId, index) => {
+				if (stationId === zooSplitStation) return; // 分岐駅はスキップ
+
+				if (stationsMap[stationId]) {
+					stationsMap[stationId].position.x = zooStartX;
+					stationsMap[stationId].position.y = zooStartY + 40; // 下に
+				}
+			});
+		}
+
+		// 電車の数をカウント
+		points.forEach((point) => {
+			if (stationsMap[point.stationId]) {
+				stationsMap[point.stationId].trainCount++;
+			}
+		});
+
+		return {
+			stations: stationsMap,
+			lineGroups,
+		};
+	}, [points]);
+
+	// 駅間の線を描画するための接続情報
+	const connections = useMemo(() => {
+		const result: { from: string; to: string; line: string }[] = [];
+
+		// 各路線別に駅間の接続を作成
+		Object.entries(stationsData.lineGroups).forEach(([line, stationIds]) => {
+			for (let i = 0; i < stationIds.length - 1; i++) {
+				// 同じ路線上の隣接する駅同士を接続
+				result.push({
+					from: stationIds[i],
+					to: stationIds[i + 1],
+					line,
+				});
+			}
+		});
+
+		return result;
+	}, [stationsData]);
+
+	// 電車を駅ごとにグループ化
+	const trainsByStation = useMemo(() => {
+		return points.reduce<Record<string, Point[]>>((acc, point) => {
+			if (!acc[point.stationId]) {
+				acc[point.stationId] = [];
+			}
+			acc[point.stationId].push(point);
+			return acc;
+		}, {});
+	}, [points]);
+
+	return (
+		<div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm mb-6">
+			<div className="overflow-x-auto">
+				<div
+					className="relative"
+					style={{ minWidth: "1200px", height: "600px" }}
+					ref={mapRef}
+				>
+					{/* 路線（駅間の線）を描画 */}
+					<svg className="absolute inset-0 w-full h-full">
+						{connections.map((conn, index) => {
+							const fromStation = stationsData.stations[conn.from];
+							const toStation = stationsData.stations[conn.to];
+							
+							if (!fromStation || !toStation) return null;
+							
+							return (
+								<line
+									key={`${conn.from}-${conn.to}-${index}`}
+									x1={fromStation.position.x}
+									y1={fromStation.position.y}
+									x2={toStation.position.x}
+									y2={toStation.position.y}
+									stroke={LINE_COLORS[conn.line] || "#000000"}
+									strokeWidth={4}
+								/>
+							);
+						})}
+					</svg>
+
+					{/* 駅を描画 */}
+					{Object.entries(stationsData.stations).map(([stationId, data]) => {
+						const isTransferStation = data.lines.length > 1;
+						const stationName = data.station.name;
+						const primaryLine = data.lines[0]; // 駅の主要路線
+						
+						return (
+							<div
+								key={stationId}
+								className="absolute transform -translate-x-1/2 -translate-y-1/2"
+								style={{
+									left: `${data.position.x}px`,
+									top: `${data.position.y}px`,
+								}}
+							>
+								{/* 駅のマーカー */}
+								<div className="relative">
+									<div
+										className={`
+                      w-6 h-6 rounded-full relative z-10 flex items-center justify-center
+                      ${isTransferStation 
+                        ? "bg-white border-2 border-gray-600" 
+                        : `${LINE_COLORS[primaryLine]} border border-white`
+                      }
+                    `}
+									></div>
+
+									{/* 乗換駅のシンボル */}
+									{isTransferStation && (
+										<div className="w-3 h-3 rounded-full bg-gray-600"></div>
+									)}
+
+									{/* 駅名表示 */}
+									<div className="absolute top-7 left-1/2 transform -translate-x-1/2 whitespace-nowrap text-xs font-medium bg-white/80 px-1 rounded">
+										{stationName}
+									</div>
+									
+									{/* 駅にいる電車を表示 */}
+									{trainsByStation[stationId]?.map((train, idx) => {
+										const service = config.syasyu.find(
+											(s) => s.code === train.sy_tr,
+										);
+										const isInbound = train.ki === "0";
+										const offset = (idx % 3) * 20; // 3列までで配置
+										const row = Math.floor(idx / 3);
+										
+										return (
+											<div
+												key={`${train.tr}-${idx}`}
+												className="absolute"
+												style={{
+													top: isInbound
+														? `-${30 + row * 25}px`
+														: `${20 + row * 25}px`,
+													left: `${offset - 20}px`,
+													zIndex: 20
+												}}
+												onClick={() => onTrainClick(train)}
+											>
+												<div className="flex items-center justify-center w-16 h-7 rounded-full bg-white shadow-md border cursor-pointer hover:bg-gray-50 transition-colors relative">
+													<span className="text-xs font-bold">
+														{train.tr.trim()}
+													</span>
+
+													{/* 種別バッジ */}
+													<div
+														className={`absolute -top-2 -right-2 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${SERVICE_COLORS[train.sy_tr] || "bg-gray-500 text-white"}`}
+													>
+														{service?.iconname || ""}
+													</div>
+
+													{/* 遅延表示 */}
+													{train.dl !== "00" && (
+														<div className="absolute -top-2 -left-2 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold bg-red-600 text-white">
+															{train.dl}分
+														</div>
+													)}
+
+													{/* 方向表示 */}
+													<div className={`absolute ${isInbound ? "right-full" : "left-full"} top-1/2 transform -translate-y-1/2 flex items-center`}>
+														<div className={`text-gray-900 animate-pulse flex ${isInbound ? "flex-row-reverse" : "flex-row"}`}>
+															{isInbound ? (
+																<IconChevronLeft size={14} className="opacity-80" />
+															) : (
+																<IconChevronRight size={14} className="opacity-80" />
+															)}
+														</div>
+													</div>
+												</div>
+											</div>
+										);
+									})}
+								</div>
+							</div>
+						);
+					})}
+
+					{/* 路線の凡例 */}
+					<div className="absolute bottom-4 left-4 bg-white p-3 rounded-lg shadow-sm border border-gray-200">
+						<div className="text-sm font-medium mb-2">路線</div>
+						<div className="flex flex-col gap-2">
+							{Object.entries(LINE_DETAILS).map(([code, details]) => (
+								<div key={code} className="flex items-center gap-2">
+									<div className={`w-4 h-4 rounded-full ${LINE_COLORS[code]}`}></div>
+									<span className="text-xs">{details.name}</span>
+								</div>
+							))}
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	);
+};
+
+// Main App componentを修正
 export const TrafficApp: React.FC = () => {
 	const traffic = useTraffic();
 	const [selectedTrain, setSelectedTrain] = useState<Point | null>(null);
 	const [isModalOpen, setIsModalOpen] = useState(false);
 
-	// 路線ごとに電車情報を取得
-	const keioMainPoints = useMemo(
-		() => getPointsForLine(traffic, "1a"),
-		[traffic],
-	);
-
-	const keioTamaPoints = useMemo(
-		() => getPointsForLine(traffic, "1b"),
-		[traffic],
-	);
-
-	const inokashiraPoints = useMemo(
-		() => getPointsForLine(traffic, "3"),
-		[traffic],
-	);
+	// すべての路線の電車情報を統合
+	const allPoints = useMemo(() => {
+		// すべての駅にいる電車を取得
+		return traffic.TS.flatMap((st) =>
+			st.ps.map((p) => ({ ...p, stationId: st.id })),
+		);
+	}, [traffic]);
 
 	const handleTrainClick = (train: Point) => {
 		setSelectedTrain(train);
@@ -724,28 +1096,34 @@ export const TrafficApp: React.FC = () => {
 
 			<StatsBar trafficData={traffic} />
 
-			<div className="space-y-6">
-				<LineTimeline
-					lineCode="1a"
-					lineName="京王本線"
-					points={keioMainPoints}
-					onTrainClick={handleTrainClick}
-				/>
+			{/* 路線図（統合版） */}
+			<NetworkMap points={allPoints} onTrainClick={handleTrainClick} />
 
-				<LineTimeline
-					lineCode="1b"
-					lineName="京王多摩線"
-					points={keioTamaPoints}
-					onTrainClick={handleTrainClick}
-				/>
+			{/* 以下のLineTimelineコンポーネントは使わず、NetworkMapに置き換え */}
+			{/* 
+            <div className="space-y-6">
+                <LineTimeline
+                    lineCode="1a"
+                    lineName="京王本線"
+                    points={keioMainPoints}
+                    onTrainClick={handleTrainClick}
+                />
 
-				<LineTimeline
-					lineCode="3"
-					lineName="井の頭線"
-					points={inokashiraPoints}
-					onTrainClick={handleTrainClick}
-				/>
-			</div>
+                <LineTimeline
+                    lineCode="1b"
+                    lineName="京王多摩線"
+                    points={keioTamaPoints}
+                    onTrainClick={handleTrainClick}
+                />
+
+                <LineTimeline
+                    lineCode="3"
+                    lineName="井の頭線"
+                    points={inokashiraPoints}
+                    onTrainClick={handleTrainClick}
+                />
+            </div>
+      */}
 
 			<TrainDetailModal
 				train={selectedTrain}
