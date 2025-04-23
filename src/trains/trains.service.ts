@@ -139,7 +139,7 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
             const trainId = train.tr.trim();
             const schedule = await this.getTrainDetail(trainId, delay);
             // ここで、駅IDは先頭のアルファベットを除去し、さらに先頭の0も除去する
-            const newStationId = stationId.replace(/^E/, "").replace(/^0/, "");
+            const newStationId = stationId.replace(/^[a-zA-Z]/, "").replace(/^0/, "");
             const stop = schedule.stops.find((s) => s.stationId === newStationId);
             if (stop) {
               estimatedArrival = stop.estimatedArrival;
