@@ -1,14 +1,15 @@
-// assets.service.ts
 import { Injectable, Logger } from "@nestjs/common";
 import { promises as fs } from "fs";
 import * as path from "path";
 import axios from "axios";
 
-const ASSETS_DIR = path.resolve(__dirname, '../../assets/json');
-const VERSION_FILE = path.join(ASSETS_DIR, 'assets_version.json');
+const ASSETS_DIR = path.resolve(__dirname, "../../assets/json");
+const VERSION_FILE = path.join(ASSETS_DIR, "assets_version.json");
 const JSON_BASE_URL = "https://i.opentidkeio.jp";
 const SYSTEM_JSON_URL = JSON_BASE_URL + "/config/system.json";
 const TRAFFIC_INFO_URL = JSON_BASE_URL + "/data/traffic_info.json";
+
+const DATA_MODE = process.env.DATA_MODE;
 
 @Injectable()
 export class AssetsService {
@@ -16,7 +17,13 @@ export class AssetsService {
 
   async getJson(filename: string): Promise<any> {
     if (filename === "traffic_info.json") {
-      return this.fetchTrafficInfo();
+      if (DATA_MODE === "debug") {
+        const assetPath = path.join(ASSETS_DIR, "debug", filename);
+        const data = await fs.readFile(assetPath, "utf-8");
+        return JSON.parse(data);
+      } else {
+        return this.fetchTrafficInfo();
+      }
     }
     // diaはダイアなので、保存しないで、ネットから取ってくるだけ。
     if (filename.startsWith("dia/")) {
