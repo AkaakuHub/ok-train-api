@@ -53,7 +53,9 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
    * 全運行情報を取得（毎回最新を取得し、lastUpdateも更新）
    */
   async getTrafficInfo(): Promise<TrafficInfo> {
-    const info = (await this.assetsService.getJson("traffic_info.json")) as TrafficInfo;
+    const info = (await this.assetsService.getJson(
+      "traffic_info.json"
+    )) as TrafficInfo;
     this.lastUpdate = new Date();
     return info;
   }
@@ -81,6 +83,11 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
       updatedAt: this.formatDateTime(trafficInfo.up[0]?.dt[0]),
       trains: [],
     };
+    if (!trafficInfo.TS || !trafficInfo.TB) {
+      // 電車が走っていない
+      this.logger.warn("No train information available");
+      return result;
+    }
     if (position.kind === "駅") {
       const stationInfo = trafficInfo.TS.find((s) => s.id === position.ID);
       if (stationInfo) {
@@ -99,18 +106,28 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
    * 列車到着予測情報を取得（trafficInfoを毎回取得）
    */
   async getTrainArrivals(stationIdOrName: string): Promise<any> {
+    // TODO: 何分後までを拾うかを選べるようにする
     const position = this.findPosition(stationIdOrName);
     if (!position || position.kind !== "駅") {
       throw new NotFoundException(`Invalid station: ${stationIdOrName}`);
     }
     const stationId = position.ID;
-    const arrivingTrains = [];
     const connectedSections = this.positions.filter(
       (p) =>
         p.kind === "駅間" &&
         (p.ID.endsWith(stationId.slice(-3)) || p.name.includes(position.name))
     );
     const trafficInfo = await this.getTrafficInfo();
+    const result = {
+      stationId: position.ID,
+      stationName: position.name,
+      updatedAt: this.formatDateTime(trafficInfo.up[0]?.dt[0]),
+      arrivingTrains: [],
+    };
+    if (!trafficInfo.TS || !trafficInfo.TB) {
+      this.logger.warn("No train information available");
+      return result;
+    }
     for (const section of connectedSections) {
       const sectionInfo = trafficInfo.TB.find((s) => s.id === section.ID);
       if (sectionInfo && sectionInfo.ps.length > 0) {
@@ -125,12 +142,16 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
             let estimatedArrival = "--:--";
             const trainId = train.tr.trim();
             const schedule = await this.getTrainDetail(trainId, delay);
-            const newStationId = stationId.replace(/^[a-zA-Z]/, "").replace(/^0/, "");
-            const stop = schedule.stops.find((s) => s.stationId === newStationId);
+            const newStationId = stationId
+              .replace(/^[a-zA-Z]/, "")
+              .replace(/^0/, "");
+            const stop = schedule.stops.find(
+              (s) => s.stationId === newStationId
+            );
             if (stop) {
               estimatedArrival = stop.estimatedArrival;
             }
-            arrivingTrains.push({
+            result.arrivingTrains.push({
               trainNumber: train.tr.trim(),
               type: this.getTrainTypeInfo(train.sy_tr),
               direction: train.ki === "0" ? "下り" : "上り",
@@ -144,12 +165,7 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
         }
       }
     }
-    return {
-      stationId: position.ID,
-      stationName: position.name,
-      updatedAt: this.formatDateTime(trafficInfo.up[0]?.dt[0]),
-      arrivingTrains,
-    };
+    return result;
   }
 
   /**
