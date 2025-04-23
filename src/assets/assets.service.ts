@@ -1,13 +1,14 @@
+// assets.service.ts
 import { Injectable, Logger } from "@nestjs/common";
 import { promises as fs } from "fs";
 import * as path from "path";
 import axios from "axios";
 
-const ASSETS_DIR = path.resolve(__dirname, "../../assets/json");
-const VERSION_FILE = path.join(ASSETS_DIR, "assets_version.json");
-const JSON_BASE_URL = "https://i.opentidkeio.jp/config/";
-const SYSTEM_JSON_URL = JSON_BASE_URL + "system.json";
-const TRAFFIC_INFO_URL = JSON_BASE_URL + "data/traffic_info.json";
+const ASSETS_DIR = path.resolve(__dirname, '../../assets/json');
+const VERSION_FILE = path.join(ASSETS_DIR, 'assets_version.json');
+const JSON_BASE_URL = "https://i.opentidkeio.jp";
+const SYSTEM_JSON_URL = JSON_BASE_URL + "/config/system.json";
+const TRAFFIC_INFO_URL = JSON_BASE_URL + "/data/traffic_info.json";
 
 @Injectable()
 export class AssetsService {
@@ -115,7 +116,7 @@ export class AssetsService {
     ];
     await this.ensureAssetsDir();
     for (const file of jsonFiles) {
-      const url = `${JSON_BASE_URL}${file}?ver=${version}`;
+      const url = `${JSON_BASE_URL}/config/${file}?ver=${version}`;
       try {
         const res = await axios.get(url);
         await fs.writeFile(
