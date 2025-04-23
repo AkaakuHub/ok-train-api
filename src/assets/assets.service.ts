@@ -48,6 +48,7 @@ export class AssetsService {
   }
 
   private async fetchTrafficInfo(): Promise<any> {
+    // 実際のデータは10sごとに更新されている
     const url = `${TRAFFIC_INFO_URL}?ts=${Date.now()}`;
     const res = await axios.get(url);
     return res.data;

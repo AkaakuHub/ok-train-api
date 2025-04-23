@@ -15,8 +15,8 @@ export class TrainsController {
     description: "運行情報JSONを型付きで返却",
     type: Object,
   })
-  getTrafficInfo(): TrafficInfo {
-    return this.trainsService.getTrafficInfo();
+  async getTrafficInfo(): Promise<TrafficInfo> {
+    return await this.trainsService.getTrafficInfo();
   }
 
   @Get("station/:idOrName")
@@ -72,9 +72,9 @@ export class TrainsController {
     },
   })
   @ApiResponse({ status: 404, description: "指定された駅が見つかりません" })
-  getTrainsForStation(@Param("idOrName") idOrName: string): any {
+  async getTrainsForStation(@Param("idOrName") idOrName: string): Promise<any> {
     try {
-      return this.trainsService.getTrainsForStation(idOrName);
+      return await this.trainsService.getTrainsForStation(idOrName);
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
@@ -130,8 +130,10 @@ export class TrainsController {
     },
   })
   @ApiResponse({ status: 404, description: "指定された駅が見つかりません" })
-  getTrainArrivals(@Param("stationIdOrName") stationIdOrName: string): any {
-    return this.trainsService.getTrainArrivals(stationIdOrName);
+  async getTrainArrivals(
+    @Param("stationIdOrName") stationIdOrName: string
+  ): Promise<any> {
+    return await this.trainsService.getTrainArrivals(stationIdOrName);
   }
 
   @Get("detail/:trainId")

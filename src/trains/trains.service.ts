@@ -13,19 +13,16 @@ import { AssetsService } from "../assets/assets.service";
 @Injectable()
 export class TrainsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TrainsService.name);
-  private trafficInfo: TrafficInfo;
   private positions: Position[];
   private trainTypes: TrainType[];
   private destinations: Destination[];
   private lastUpdate: Date = new Date();
-  private readonly updateInterval = 30000; // 30秒ごとにデータを更新
   private intervalId: NodeJS.Timeout;
 
   constructor(private readonly assetsService: AssetsService) {}
 
   async onModuleInit() {
     await this.loadAllData();
-    this.setupPeriodicUpdate();
   }
 
   async onModuleDestroy() {
@@ -37,8 +34,6 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
    */
   private async loadAllData(): Promise<void> {
     try {
-      // traffic_info.jsonは毎回webから取得
-      this.trafficInfo = await this.assetsService.getJson("traffic_info.json");
       // 他のjsonはassets/json/から取得
       const positionData = await this.assetsService.getJson("position.json");
       this.positions = positionData.pos;
@@ -54,22 +49,13 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private setupPeriodicUpdate(): void {
-    this.intervalId = setInterval(async () => {
-      try {
-        await this.loadAllData();
-        this.logger.log("Data updated");
-      } catch (error) {
-        this.logger.error(`Failed to update data: ${error.message}`);
-      }
-    }, this.updateInterval);
-  }
-
   /**
-   * 全運行情報を取得
+   * 全運行情報を取得（毎回最新を取得し、lastUpdateも更新）
    */
-  getTrafficInfo(): TrafficInfo {
-    return this.trafficInfo;
+  async getTrafficInfo(): Promise<TrafficInfo> {
+    const info = (await this.assetsService.getJson("traffic_info.json")) as TrafficInfo;
+    this.lastUpdate = new Date();
+    return info;
   }
 
   /**
@@ -80,27 +66,28 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 指定した駅の列車情報を取得
+   * 指定した駅の列車情報を取得（trafficInfoを毎回取得）
    */
   async getTrainsForStation(stationIdOrName: string): Promise<any> {
     const position = this.findPosition(stationIdOrName);
     if (!position) {
       throw new NotFoundException(`Station not found: ${stationIdOrName}`);
     }
+    const trafficInfo = await this.getTrafficInfo();
     const result = {
       stationId: position.ID,
       stationName: position.name,
       stationType: position.kind,
-      updatedAt: this.formatDateTime(this.trafficInfo.up[0]?.dt[0]),
+      updatedAt: this.formatDateTime(trafficInfo.up[0]?.dt[0]),
       trains: [],
     };
     if (position.kind === "駅") {
-      const stationInfo = this.trafficInfo.TS.find((s) => s.id === position.ID);
+      const stationInfo = trafficInfo.TS.find((s) => s.id === position.ID);
       if (stationInfo) {
         result.trains = this.formatTrains(stationInfo.ps);
       }
     } else if (position.kind === "駅間") {
-      const sectionInfo = this.trafficInfo.TB.find((s) => s.id === position.ID);
+      const sectionInfo = trafficInfo.TB.find((s) => s.id === position.ID);
       if (sectionInfo) {
         result.trains = this.formatTrains(sectionInfo.ps);
       }
@@ -109,7 +96,7 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 列車到着予測情報を取得
+   * 列車到着予測情報を取得（trafficInfoを毎回取得）
    */
   async getTrainArrivals(stationIdOrName: string): Promise<any> {
     const position = this.findPosition(stationIdOrName);
@@ -123,8 +110,9 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
         p.kind === "駅間" &&
         (p.ID.endsWith(stationId.slice(-3)) || p.name.includes(position.name))
     );
+    const trafficInfo = await this.getTrafficInfo();
     for (const section of connectedSections) {
-      const sectionInfo = this.trafficInfo.TB.find((s) => s.id === section.ID);
+      const sectionInfo = trafficInfo.TB.find((s) => s.id === section.ID);
       if (sectionInfo && sectionInfo.ps.length > 0) {
         for (const train of sectionInfo.ps) {
           const isApproaching = this.isTrainApproachingStation(
@@ -135,10 +123,8 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
           if (isApproaching) {
             const delay = train.dl === "00" ? 0 : parseInt(train.dl, 10);
             let estimatedArrival = "--:--";
-            // 列車のID(ex: 4899)から、dia/4899.jsonを取得して、この駅のIDから、到着予定時刻を取得する
             const trainId = train.tr.trim();
             const schedule = await this.getTrainDetail(trainId, delay);
-            // ここで、駅IDは先頭のアルファベットを除去し、さらに先頭の0も除去する
             const newStationId = stationId.replace(/^[a-zA-Z]/, "").replace(/^0/, "");
             const stop = schedule.stops.find((s) => s.stationId === newStationId);
             if (stop) {
@@ -161,7 +147,7 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
     return {
       stationId: position.ID,
       stationName: position.name,
-      updatedAt: this.formatDateTime(this.trafficInfo.up[0]?.dt[0]),
+      updatedAt: this.formatDateTime(trafficInfo.up[0]?.dt[0]),
       arrivingTrains,
     };
   }
@@ -239,14 +225,6 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 日時情報をフォーマット
-   */
-  private formatDateTime(dt: any): string {
-    if (!dt) return "Unknown";
-    return `${dt.yy}-${dt.mt}-${dt.dy} ${dt.hh}:${dt.mm}:${dt.ss}`;
-  }
-
-  /**
    * 列車IDでダイヤAPIを直接参照し、停車駅一覧・時刻表・到着時刻を返す(遅延の反映はここではしない)
    */
   async getTrainDetail(trainId: string, delayMin?: number): Promise<any> {
@@ -301,5 +279,14 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
       );
     }
     return stop.estimatedArrival;
+  }
+
+  /**
+   * dtオブジェクト({yy,mt,dy,hh,mm,ss})から日付文字列を生成
+   */
+  private formatDateTime(dt: any): string {
+    if (!dt) return "Unknown";
+    const pad = (n: any) => n.toString().padStart(2, "0");
+    return `${dt.yy}-${pad(dt.mt)}-${pad(dt.dy)} ${pad(dt.hh)}:${pad(dt.mm)}:${pad(dt.ss)}`;
   }
 }
