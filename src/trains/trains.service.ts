@@ -104,87 +104,63 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * 列車到着予測情報を取得（trafficInfoを毎回取得）
+   * すべての走行中の電車に対して、指定駅に到着する時刻・停車/通過・駅停車中か駅間かを返す
    */
   async getTrainArrivals(stationIdOrName: string): Promise<any> {
-    // TODO: 何分後までを拾うかを選べるようにする
+    // TODO: 今、路線を完全に無視しているため、京王本線の時間みたいのに、井の頭線も見に行ってしまっているのを治す
     const position = this.findPosition(stationIdOrName);
     if (!position || position.kind !== "駅") {
       throw new NotFoundException(`Invalid station: ${stationIdOrName}`);
     }
     const stationId = position.ID;
-    const connectedSections = this.positions.filter(
-      (p) =>
-        p.kind === "駅間" &&
-        (p.ID.endsWith(stationId.slice(-3)) || p.name.includes(position.name))
-    );
     const trafficInfo = await this.getTrafficInfo();
-    const result = {
+    const allTrains: TrainPoint[] = [];
+    // 駅停車中
+    if (trafficInfo.TS) {
+      for (const s of trafficInfo.TS) {
+        if (Array.isArray(s.ps)) allTrains.push(...s.ps);
+      }
+    }
+    // 駅間走行中
+    if (trafficInfo.TB) {
+      for (const s of trafficInfo.TB) {
+        if (Array.isArray(s.ps)) allTrains.push(...s.ps);
+      }
+    }
+    const arrivingTrains = [];
+    for (const train of allTrains) {
+      const delay = train.dl === "00" ? 0 : parseInt(train.dl, 10);
+      const trainId = train.tr.trim();
+      const schedule = await this.getTrainDetail(trainId, delay);
+      // 駅IDは先頭英字を除いた数字部分で比較
+      const newStationId = stationId.replace(/^[a-zA-Z]/, "").replace(/^0/, "");
+      const stop = schedule.stops.find((s) => s.stationId === newStationId);
+      let estimatedArrival = "--:--";
+      let passType = "通過";
+      if (stop) {
+        estimatedArrival = stop.estimatedArrival;
+        if (estimatedArrival !== "--:--") {
+          passType = "停車";
+        }
+      }
+      arrivingTrains.push({
+        trainNumber: train.tr.trim(),
+        type: this.getTrainTypeInfo(train.sy_tr),
+        direction: train.ki === "0" ? "上り" : "下り",
+        destination: this.getDestinationInfo(train.ik_tr),
+        delay,
+        isInStation: train.bs === "0",
+        estimatedArrival,
+        passType, // "停車" or "通過"
+        information: train.inf || null,
+      });
+    }
+    return {
       stationId: position.ID,
       stationName: position.name,
       updatedAt: this.formatDateTime(trafficInfo.up[0]?.dt[0]),
-      arrivingTrains: [],
+      arrivingTrains,
     };
-    if (!trafficInfo.TS || !trafficInfo.TB) {
-      this.logger.warn("No train information available");
-      return result;
-    }
-    for (const section of connectedSections) {
-      const sectionInfo = trafficInfo.TB.find((s) => s.id === section.ID);
-      if (sectionInfo && sectionInfo.ps.length > 0) {
-        for (const train of sectionInfo.ps) {
-          const isApproaching = this.isTrainApproachingStation(
-            section.ID,
-            train.ki,
-            stationId
-          );
-          if (isApproaching) {
-            const delay = train.dl === "00" ? 0 : parseInt(train.dl, 10);
-            let estimatedArrival = "--:--";
-            const trainId = train.tr.trim();
-            const schedule = await this.getTrainDetail(trainId, delay);
-            const newStationId = stationId
-              .replace(/^[a-zA-Z]/, "")
-              .replace(/^0/, "");
-            const stop = schedule.stops.find(
-              (s) => s.stationId === newStationId
-            );
-            if (stop) {
-              estimatedArrival = stop.estimatedArrival;
-            }
-            result.arrivingTrains.push({
-              trainNumber: train.tr.trim(),
-              type: this.getTrainTypeInfo(train.sy_tr),
-              direction: train.ki === "0" ? "上り" : "下り",
-              destination: this.getDestinationInfo(train.ik_tr),
-              delay,
-              fromSection: section.name,
-              estimatedArrival,
-              information: train.inf || null,
-            });
-          }
-        }
-      }
-    }
-    return result;
-  }
-
-  /**
-   * 列車が駅に向かっているかチェック
-   */
-  private isTrainApproachingStation(
-    sectionId: string,
-    direction: string,
-    stationId: string
-  ): boolean {
-    // 駅間IDの先頭文字で判断（U: 上り方向、D: 下り方向）
-    const sectionType = sectionId.charAt(0);
-
-    // 上り列車(ki=1)は、下り方向の駅間(D)から来る場合に到着する
-    // 下り列車(ki=0)は、上り方向の駅間(U)から来る場合に到着する
-    return (
-      (direction === "1" && sectionType === "D") ||
-      (direction === "0" && sectionType === "U")
-    );
   }
 
   /**
@@ -245,6 +221,7 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
    */
   async getTrainDetail(trainId: string, delayMin?: number): Promise<any> {
     // https://i.opentidkeio.jp/dia/{trainId}.json を直接取得
+    // trainIDが"0123"だったら123に変換
     const schedule = await this.assetsService.getJson(`dia/${trainId}.json`);
     if (!schedule || !Array.isArray(schedule.dy)) {
       throw new NotFoundException(`Train schedule not found: ${trainId}`);
@@ -277,24 +254,6 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
       trainId,
       stops,
     };
-  }
-
-  /**
-   * 指定駅への到着予測時刻を取得
-   */
-  async estimateArrivalTime(
-    trainId: string,
-    stationId: string,
-    delayMin: number
-  ): Promise<string> {
-    const detail = await this.getTrainDetail(trainId, delayMin);
-    const stop = detail.stops.find((s) => s.stationId === stationId);
-    if (!stop) {
-      throw new NotFoundException(
-        `Station ${stationId} not on train ${trainId}`
-      );
-    }
-    return stop.estimatedArrival;
   }
 
   /**

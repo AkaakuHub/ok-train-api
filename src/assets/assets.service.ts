@@ -28,24 +28,39 @@ export class AssetsService {
     }
     // diaはダイアなので、キャッシュする
     if (filename.startsWith("dia/")) {
-      const trainNo = filename.replace(/^dia\//, "");
-      const diaPath = path.join(DIA_DIR, trainNo);
+      const trainNo1 = filename.replace(/^dia\//, "").replace(/\.json$/, "");
+      // 何故かわからないけど、0を先頭につけたりつけなかったりするので両方試す
+      const trainNo2 = trainNo1.replace(/^0/, "");
       await this.ensureDiaDir();
-      if (await this.exists(diaPath)) {
+      const diaPath1 = path.join(DIA_DIR, `${trainNo1}.json`);
+      const diaPath2 = path.join(DIA_DIR, `${trainNo2}.json`);
+      if (await this.exists(diaPath1)) {
         try {
-          const data = await fs.readFile(diaPath, "utf-8");
+          const data = await fs.readFile(diaPath1, "utf-8");
           return JSON.parse(data);
-        } catch {
-        }
+        } catch {}
       }
-      const url = `https://i.opentidkeio.jp/dia/${trainNo}`;
+      if (await this.exists(diaPath2)) {
+        try {
+          const data = await fs.readFile(diaPath2, "utf-8");
+          return JSON.parse(data);
+        } catch {}
+      }
       try {
-        const res = await axios.get(url);
-        await fs.writeFile(diaPath, JSON.stringify(res.data), "utf-8");
+        const res = await axios.get(`https://i.opentidkeio.jp/dia/${trainNo1}.json`);
+        await fs.writeFile(diaPath1, JSON.stringify(res.data), "utf-8");
         return res.data;
-      } catch (e) {
-        this.logger.warn(`Failed to fetch dia: ${filename}: ${e}`);
-        return null;
+      } catch  {
+        try {
+          const res = await axios.get(
+            `https://i.opentidkeio.jp/dia/${trainNo2}.json`
+          );
+          await fs.writeFile(diaPath2, JSON.stringify(res.data), "utf-8");
+          return res.data;
+        } catch (e) {
+          this.logger.warn(`Failed to fetch dia: ${filename}: ${e}`);
+          return null;
+        }
       }
     }
     const assetPath = path.join(ASSETS_DIR, filename);

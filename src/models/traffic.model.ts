@@ -60,7 +60,7 @@ export class TrainPoint {
   })
   sy_tr: string;
 
-  @ApiProperty({ description: "方向（0: 下り、1: 上り）", example: "1" })
+  @ApiProperty({ description: "方向（0: 上り、1: 下り）", example: "1" })
   ki: string;
 
   @ApiProperty({
