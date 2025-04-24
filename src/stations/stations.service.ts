@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, Logger } from "@nestjs/common";
 import { Position } from "../models/station.model";
-import { AssetsService } from "src/assets/assets.service";
+import { AssetsService } from "../assets/assets.service";
 
 @Injectable()
 export class StationsService {
