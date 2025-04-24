@@ -1,7 +1,7 @@
 {
   "name": "ok-train-api",
   "version": "0.1.0",
-  "description": "京王電鉄リアルタイム運行情報API",
+  "description": "京王電鉄リアルタイム運行情報API(非公式)",
   "author": "",
   "private": true,
   "license": "UNLICENSED",

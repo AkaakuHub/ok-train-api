@@ -19,8 +19,8 @@ async function bootstrap() {
 
   // Swagger設定
   const config = new DocumentBuilder()
-    .setTitle("京王電鉄リアルタイム運行情報API")
-    .setDescription("京王電鉄の列車位置情報をリアルタイムで提供するAPI")
+    .setTitle("京王電鉄リアルタイム運行情報API(非公式)")
+    .setDescription("京王電鉄の列車位置情報をリアルタイムで提供するAPI(非公式)")
     .setVersion("1.0")
     .build();
 
