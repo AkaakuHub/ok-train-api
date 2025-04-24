@@ -108,6 +108,7 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
    */
   async getTrainArrivals(stationIdOrName: string): Promise<any> {
     // TODO: 今、路線を完全に無視しているため、京王本線の時間みたいのに、井の頭線も見に行ってしまっているのを治す
+    // TODO: 新線新宿間のみの列車(ex. 笹塚から新線新宿のみ)も含まれていて、あやまった通過判定がでるのを治す
     const position = this.findPosition(stationIdOrName);
     if (!position || position.kind !== "駅") {
       throw new NotFoundException(`Invalid station: ${stationIdOrName}`);
@@ -142,6 +143,13 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
         if (estimatedArrival !== "--:--") {
           passType = "停車";
         }
+      }
+      // estimatedArrivalが過去なら、追加しない
+      const now = new Date();
+      const [hh, mm] = estimatedArrival.split(":").map(Number);
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mm, 0, 0);
+      if (d < now) {
+        continue;
       }
       arrivingTrains.push({
         trainNumber: train.tr.trim(),
