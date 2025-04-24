@@ -103,17 +103,35 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * 駅IDから路線コードを推測する（例: E001〜E054は京王線、E081〜E097は井の頭線）
+   */
+  private getLineCodeByStationId(stationId: string): string | null {
+    // 例: E001〜E032, E036~E054: 京王線(1), E033 ~ E035, E101~E103: 新線新宿線(2), E081〜E097: 井の頭線(3)
+    const num = parseInt(stationId.replace(/^E/, ""), 10);
+    if ((num >= 1 && num <= 32) || (num >= 36 && num <= 54)) {
+      return "1"; // 京王線系
+    } else if ((num >= 33 && num <= 35) || (num >= 101 && num <= 103)) {
+      return "2"; // 新線新宿線系
+    } else if (num >= 81 && num <= 97) {
+      return "3"; // 井の頭線系
+    }
+    return null;
+  }
+
+  /**
    * 列車到着予測情報を取得（trafficInfoを毎回取得）
-   * すべての走行中の電車に対して、指定駅に到着する時刻・停車/通過・駅停車中か駅間かを返す
+   * 駅が所属する路線のみを対象に絞り込む
    */
   async getTrainArrivals(stationIdOrName: string): Promise<any> {
-    // TODO: 今、路線を完全に無視しているため、京王本線の時間みたいのに、井の頭線も見に行ってしまっているのを治す
     // TODO: 新線新宿間のみの列車(ex. 笹塚から新線新宿のみ)も含まれていて、あやまった通過判定がでるのを治す
+    // TODO: 間違えて、何故か別の路線も交じる治す
     const position = this.findPosition(stationIdOrName);
     if (!position || position.kind !== "駅") {
       throw new NotFoundException(`Invalid station: ${stationIdOrName}`);
     }
     const stationId = position.ID;
+    // 駅IDから路線コードを推測
+    const lineCode = this.getLineCodeByStationId(stationId);
     const trafficInfo = await this.getTrafficInfo();
     const allTrains: TrainPoint[] = [];
     // 駅停車中
@@ -128,6 +146,17 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
         if (Array.isArray(s.ps)) allTrains.push(...s.ps);
       }
     }
+    // // 路線コードで絞り込み
+    // const filteredTrains = allTrains.filter((train) => {
+    //   // 列車番号の先頭1桁で路線を推測（例: 1xxx, 2xxx: 京王線, 8xxx: 井の頭線）そんあに上手くできていない、残念
+    //   const trainNo = train.tr.trim();
+    //   if (lineCode === "1") {
+    //     return /^([12]|0)[0-9]{3}$/.test(trainNo); // 京王線系
+    //   } else if (lineCode === "3") {
+    //     return /^8[0-9]{3}$/.test(trainNo); // 井の頭線系
+    //   }
+    //   return true; // 不明な場合は全て
+    // });
     const arrivingTrains = [];
     for (const train of allTrains) {
       const delay = train.dl === "00" ? 0 : parseInt(train.dl, 10);
@@ -143,11 +172,21 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
         if (estimatedArrival !== "--:--") {
           passType = "停車";
         }
+      } else {
+        continue; // 停車駅にない場合はスキップ
       }
       // estimatedArrivalが過去なら、追加しない
       const now = new Date();
       const [hh, mm] = estimatedArrival.split(":").map(Number);
-      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mm, 0, 0);
+      const d = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        hh,
+        mm,
+        0,
+        0
+      );
       if (d < now) {
         continue;
       }
