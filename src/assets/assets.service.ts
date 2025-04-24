@@ -29,11 +29,13 @@ export class AssetsService {
     // diaはダイアなので、キャッシュする
     if (filename.startsWith("dia/")) {
       const trainNo1 = filename.replace(/^dia\//, "").replace(/\.json$/, "");
+      // console.log(`trainNo1: ${trainNo1}`);
       // 何故かわからないけど、0を先頭につけたりつけなかったりするので両方試す
       // いや、0077と077は別物だ。難しい
 
       // とりあえず、0は1つだけ消すことにする。2つは消してはいけない
       const trainNo2 = trainNo1.replace(/^0/, "");
+      // console.log(`trainNo2: ${trainNo2}`);
       await this.ensureDiaDir();
       const diaPath1 = path.join(DIA_DIR, `${trainNo1}.json`);
       const diaPath2 = path.join(DIA_DIR, `${trainNo2}.json`);
@@ -43,17 +45,19 @@ export class AssetsService {
           return JSON.parse(data);
         } catch {}
       }
-      if (await this.exists(diaPath2)) {
-        try {
-          const data = await fs.readFile(diaPath2, "utf-8");
-          return JSON.parse(data);
-        } catch {}
-      }
       try {
-        const res = await axios.get(`https://i.opentidkeio.jp/dia/${trainNo1}.json`);
+        const res = await axios.get(
+          `https://i.opentidkeio.jp/dia/${trainNo1}.json`
+        );
         await fs.writeFile(diaPath1, JSON.stringify(res.data), "utf-8");
         return res.data;
-      } catch  {
+      } catch {
+        if (await this.exists(diaPath2)) {
+          try {
+            const data = await fs.readFile(diaPath2, "utf-8");
+            return JSON.parse(data);
+          } catch {}
+        }
         try {
           const res = await axios.get(
             `https://i.opentidkeio.jp/dia/${trainNo2}.json`

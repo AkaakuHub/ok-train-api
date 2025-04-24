@@ -119,6 +119,30 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * trafficInfo のエントリ配列から該当行の列車情報を抽出して返す
+   *
+   * @param {Array<{id: string, ps: any[]}>} entries  TS または TB の配列
+   * @param {string} lineCode  フィルタ対象の路線コード
+   * @returns {any[]}  抽出した列車情報の配列
+   */
+  private collectTrains(
+    entries: Array<{ id: string; ps: any[] }>,
+    lineCode: string
+  ): any[] {
+    const result = [];
+    for (const { id, ps } of entries) {
+      if (!Array.isArray(ps)) {
+        continue;
+      }
+      const formattedCode = id.replace(/^[a-zA-Z]/, "").replace(/^0/, "");
+      if (this.getLineCodeByStationId(formattedCode) === lineCode) {
+        result.push(...ps);
+      }
+    }
+    return result;
+  }
+
+  /**
    * 列車到着予測情報を取得（trafficInfoを毎回取得）
    * 駅が所属する路線のみを対象に絞り込む
    */
@@ -136,27 +160,18 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
     const allTrains: TrainPoint[] = [];
     // 駅停車中
     if (trafficInfo.TS) {
-      for (const s of trafficInfo.TS) {
-        if (Array.isArray(s.ps)) allTrains.push(...s.ps);
-      }
+      allTrains.push(...this.collectTrains(trafficInfo.TS, lineCode));
     }
     // 駅間走行中
     if (trafficInfo.TB) {
-      for (const s of trafficInfo.TB) {
-        if (Array.isArray(s.ps)) allTrains.push(...s.ps);
-      }
+      allTrains.push(...this.collectTrains(trafficInfo.TB, lineCode));
     }
-    // // 路線コードで絞り込み
-    // const filteredTrains = allTrains.filter((train) => {
-    //   // 列車番号の先頭1桁で路線を推測（例: 1xxx, 2xxx: 京王線, 8xxx: 井の頭線）そんあに上手くできていない、残念
-    //   const trainNo = train.tr.trim();
-    //   if (lineCode === "1") {
-    //     return /^([12]|0)[0-9]{3}$/.test(trainNo); // 京王線系
-    //   } else if (lineCode === "3") {
-    //     return /^8[0-9]{3}$/.test(trainNo); // 井の頭線系
-    //   }
-    //   return true; // 不明な場合は全て
-    // });
+    // console.log("allTrains", allTrains);
+    // なぜか、実際には走ってない列車の情報も入る？？謎
+    // 実際に走っているのは089なのに、jsonには0089が入る、のような場合がある
+    // 予想: 多分生で配信されるjsonでは全部idが4ケタにフォーマットされていて、idだけでは区別できなさそう。
+    // なので、いちいち駅の情報も見に行って、路線判定する
+
     const arrivingTrains = [];
     for (const train of allTrains) {
       const delay = train.dl === "00" ? 0 : parseInt(train.dl, 10);
@@ -268,7 +283,6 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
    */
   async getTrainDetail(trainId: string, delayMin?: number): Promise<any> {
     // https://i.opentidkeio.jp/dia/{trainId}.json を直接取得
-    // trainIDが"0123"だったら123に変換
     const schedule = await this.assetsService.getJson(`dia/${trainId}.json`);
     if (!schedule || !Array.isArray(schedule.dy)) {
       throw new NotFoundException(`Train schedule not found: ${trainId}`);
