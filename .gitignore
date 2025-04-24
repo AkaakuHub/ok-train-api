@@ -56,3 +56,6 @@ pnpm-lock.yaml
 dist
 /assets
 /swagger.json
+
+.env*
+!.env.example

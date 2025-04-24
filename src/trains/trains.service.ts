@@ -148,6 +148,8 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
    */
   async getTrainArrivals(stationIdOrName: string): Promise<any> {
     // TODO: 新線新宿間のみの列車(ex. 笹塚から新線新宿のみ)も含まれていて、あやまった通過判定がでるのを治す
+    // TODO: 通過した京王ライナーとかで、通過時刻が過去の場合なのに含まれてしまっていることがある。
+
     const position = this.findPosition(stationIdOrName);
     if (!position || position.kind !== "駅") {
       throw new NotFoundException(`Invalid station: ${stationIdOrName}`);

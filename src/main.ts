@@ -16,8 +16,11 @@ async function bootstrap() {
     })
   );
 
-  // CORSを有効化
-  app.enableCors();
+  const CORS_ORIGINS = process.env.CORS_ORIGINS || "http://localhost:3000";
+
+  app.enableCors({
+    origin: CORS_ORIGINS.split(","),
+  });
 
   // Swagger設定
   const config = new DocumentBuilder()
