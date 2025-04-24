@@ -19,7 +19,7 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
   private lastUpdate: Date = new Date();
   private intervalId: NodeJS.Timeout;
 
-  constructor(private readonly assetsService: AssetsService) {}
+  constructor(private readonly assetsService: AssetsService) { }
 
   async onModuleInit() {
     await this.loadAllData();
@@ -103,7 +103,7 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 駅IDから路線コードを推測する（例: E001〜E054は京王線、E081〜E097は井の頭線）
+   * 駅IDから路線コードを推測する
    */
   private getLineCodeByStationId(stationId: string): string | null {
     // 例: E001〜E032, E036~E054: 京王線(1), E033 ~ E035, E101~E103: 新線新宿線(2), E081〜E097: 井の頭線(3)
@@ -149,6 +149,7 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
   async getTrainArrivals(stationIdOrName: string): Promise<any> {
     // TODO: 新線新宿間のみの列車(ex. 笹塚から新線新宿のみ)も含まれていて、あやまった通過判定がでるのを治す
     // TODO: 通過した京王ライナーとかで、通過時刻が過去の場合なのに含まれてしまっていることがある。
+    // TODO: なぜか、とっくに通り過ぎてるのに表示されることがある
 
     const position = this.findPosition(stationIdOrName);
     if (!position || position.kind !== "駅") {
@@ -194,16 +195,37 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
       // estimatedArrivalが過去なら、追加しない
       const now = new Date();
       const [hh, mm] = estimatedArrival.split(":").map(Number);
+
+      // 日付をまたぐ時間帯の処理（00:00～03:59は翌日とみなす）
+      let targetDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+      // 現在時刻が深夜（0時～3時台）の場合
+      if (now.getHours() >= 0 && now.getHours() < 4) {
+        // 列車の到着時刻が夕方以降（18時以降）なら前日とみなす
+        if (hh >= 18) {
+          targetDate.setDate(targetDate.getDate() - 1);
+        }
+      }
+      // 現在時刻が夕方以降（18時以降）の場合
+      else if (now.getHours() >= 18) {
+        // 列車の到着時刻が早朝（4時未満）なら翌日とみなす
+        if (hh >= 0 && hh < 4) {
+          targetDate.setDate(targetDate.getDate() + 1);
+        }
+      }
+
       const d = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
+        targetDate.getFullYear(),
+        targetDate.getMonth(),
+        targetDate.getDate(),
         hh,
         mm,
         0,
         0
       );
+
       if (d < now) {
+        // this.logger.debug(`スキップ: 列車${train.tr.trim()}の${stop.stationName}到着予定(${estimatedArrival})は過去の時刻です`);
         continue;
       }
       arrivingTrains.push({
