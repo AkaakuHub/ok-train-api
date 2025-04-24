@@ -8,6 +8,7 @@ const VERSION_FILE = path.join(ASSETS_DIR, "assets_version.json");
 const JSON_BASE_URL = "https://i.opentidkeio.jp";
 const SYSTEM_JSON_URL = JSON_BASE_URL + "/config/system.json";
 const TRAFFIC_INFO_URL = JSON_BASE_URL + "/data/traffic_info.json";
+const DIA_DIR = path.join(ASSETS_DIR, "dia");
 
 const DATA_MODE = process.env.DATA_MODE;
 
@@ -25,12 +26,22 @@ export class AssetsService {
         return this.fetchTrafficInfo();
       }
     }
-    // diaはダイアなので、保存しないで、ネットから取ってくるだけ。
+    // diaはダイアなので、キャッシュする
     if (filename.startsWith("dia/")) {
       const trainNo = filename.replace(/^dia\//, "");
+      const diaPath = path.join(DIA_DIR, trainNo);
+      await this.ensureDiaDir();
+      if (await this.exists(diaPath)) {
+        try {
+          const data = await fs.readFile(diaPath, "utf-8");
+          return JSON.parse(data);
+        } catch {
+        }
+      }
       const url = `https://i.opentidkeio.jp/dia/${trainNo}`;
       try {
         const res = await axios.get(url);
+        await fs.writeFile(diaPath, JSON.stringify(res.data), "utf-8");
         return res.data;
       } catch (e) {
         this.logger.warn(`Failed to fetch dia: ${filename}: ${e}`);
@@ -122,6 +133,8 @@ export class AssetsService {
       // traffic_info.jsonは除外
     ];
     await this.ensureAssetsDir();
+    // diaキャッシュをクリア
+    await this.clearDiaDir();
     for (const file of jsonFiles) {
       const url = `${JSON_BASE_URL}/config/${file}?ver=${version}`;
       try {
@@ -142,6 +155,27 @@ export class AssetsService {
       await fs.mkdir(ASSETS_DIR, { recursive: true });
     } catch (e) {
       this.logger.warn(`Failed to create assets dir: ${e}`);
+    }
+  }
+
+  private async ensureDiaDir() {
+    try {
+      await fs.mkdir(DIA_DIR, { recursive: true });
+    } catch (e) {
+      this.logger.warn(`Failed to create dia dir: ${e}`);
+    }
+  }
+
+  private async clearDiaDir() {
+    try {
+      if (await this.exists(DIA_DIR)) {
+        const files = await fs.readdir(DIA_DIR);
+        for (const file of files) {
+          await fs.unlink(path.join(DIA_DIR, file));
+        }
+      }
+    } catch (e) {
+      this.logger.warn(`Failed to clear dia dir: ${e}`);
     }
   }
 
