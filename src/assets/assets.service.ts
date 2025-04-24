@@ -30,6 +30,9 @@ export class AssetsService {
     if (filename.startsWith("dia/")) {
       const trainNo1 = filename.replace(/^dia\//, "").replace(/\.json$/, "");
       // 何故かわからないけど、0を先頭につけたりつけなかったりするので両方試す
+      // いや、0077と077は別物だ。難しい
+
+      // とりあえず、0は1つだけ消すことにする。2つは消してはいけない
       const trainNo2 = trainNo1.replace(/^0/, "");
       await this.ensureDiaDir();
       const diaPath1 = path.join(DIA_DIR, `${trainNo1}.json`);
