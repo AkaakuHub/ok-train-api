@@ -148,7 +148,6 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
    */
   async getTrainArrivals(stationIdOrName: string): Promise<any> {
     // TODO: 新線新宿間のみの列車(ex. 笹塚から新線新宿のみ)も含まれていて、あやまった通過判定がでるのを治す
-    // TODO: 通過した京王ライナーとかで、通過時刻が過去の場合なのに含まれてしまっていることがある。
     // TODO: なぜか、とっくに通り過ぎてるのに表示されることがある
 
     const position = this.findPosition(stationIdOrName);
@@ -184,14 +183,74 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
       const stop = schedule.stops.find((s) => s.stationId === newStationId);
       let estimatedArrival = "--:--";
       let passType = "通過";
+
       if (stop) {
         estimatedArrival = stop.estimatedArrival;
         if (estimatedArrival !== "--:--") {
           passType = "停車";
+        } else {
+          continue; // 通過列車はもう載せない
+
+          // // 通過列車の場合、前後の停車駅から通過時刻を推定
+          // const stopIndex = schedule.stops.findIndex((s) => s.stationId === newStationId);
+
+          // // 前の停車駅を探す
+          // let prevStop = null;
+          // for (let i = stopIndex - 1; i >= 0; i--) {
+          //   if (schedule.stops[i].estimatedArrival !== "--:--") {
+          //     prevStop = schedule.stops[i];
+          //     break;
+          //   }
+          // }
+
+          // // 次の停車駅を探す
+          // let nextStop = null;
+          // for (let i = stopIndex + 1; i < schedule.stops.length; i++) {
+          //   if (schedule.stops[i].estimatedArrival !== "--:--") {
+          //     nextStop = schedule.stops[i];
+          //     break;
+          //   }
+          // }
+
+          // // 前後の停車駅がある場合、通過時刻を推定
+          // if (prevStop && nextStop) {
+          //   // 前後の駅の位置を取得して距離の比率を計算
+          //   // const prevStopPos = this.findPosition(prevStop.stationId);
+          //   // const currentStopPos = this.findPosition(newStationId);
+          //   // const nextStopPos = this.findPosition(nextStop.stationId);
+
+          //   // if (prevStopPos && currentStopPos && nextStopPos) {
+          //   // 時刻を分単位に変換
+          //   const [prevHH, prevMM] = prevStop.estimatedArrival.split(':').map(Number);
+          //   const [nextHH, nextMM] = nextStop.estimatedArrival.split(':').map(Number);
+
+          //   let prevTimeInMinutes = prevHH * 60 + prevMM;
+          //   let nextTimeInMinutes = nextHH * 60 + nextMM;
+
+          //   // 日付をまたぐ場合の処理
+          //   if (nextTimeInMinutes < prevTimeInMinutes) {
+          //     nextTimeInMinutes += 24 * 60; // 翌日の場合は24時間加算
+          //   }
+
+          //   // // 単純な駅の位置から線形補間（より精度が必要なら駅間距離を使用）
+          //   // const totalStations = Math.abs(Number(nextStop.stationId) - Number(prevStop.stationId));
+          //   // const currentPosition = Math.abs(Number(newStationId) - Number(prevStop.stationId));
+          //   // const ratio = currentPosition / totalStations;
+
+          //   // 推定通過時刻を計算
+          //   const estimatedPassTimeInMinutes = Math.round(prevTimeInMinutes + (nextTimeInMinutes - prevTimeInMinutes));
+
+          //   const estimatedPassHH = Math.floor(estimatedPassTimeInMinutes / 60) % 24;
+          //   const estimatedPassMM = estimatedPassTimeInMinutes % 60;
+
+          //   estimatedArrival = `${estimatedPassHH.toString().padStart(2, '0')}:${estimatedPassMM.toString().padStart(2, '0')}`;
+          // }
+          // // }
         }
       } else {
         continue; // 停車駅にない場合はスキップ
       }
+
       // estimatedArrivalが過去なら、追加しない
       const now = new Date();
       const [hh, mm] = estimatedArrival.split(":").map(Number);
@@ -228,6 +287,10 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
         // this.logger.debug(`スキップ: 列車${train.tr.trim()}の${stop.stationName}到着予定(${estimatedArrival})は過去の時刻です`);
         continue;
       }
+      // if (passType === "通過") {
+      //   estimatedArrival = "--:--";
+      // }
+
       arrivingTrains.push({
         trainNumber: train.tr.trim(),
         type: this.getTrainTypeInfo(train.sy_tr),
@@ -240,6 +303,7 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
         information: train.inf || null,
       });
     }
+
     return {
       stationId: position.ID,
       stationName: position.name,
