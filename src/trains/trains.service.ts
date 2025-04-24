@@ -154,7 +154,7 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
             result.arrivingTrains.push({
               trainNumber: train.tr.trim(),
               type: this.getTrainTypeInfo(train.sy_tr),
-              direction: train.ki === "0" ? "下り" : "上り",
+              direction: train.ki === "0" ? "上り" : "下り",
               destination: this.getDestinationInfo(train.ik_tr),
               delay,
               fromSection: section.name,
@@ -194,7 +194,7 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
     return trains.map((train) => ({
       trainNumber: train.tr.trim(),
       type: this.getTrainTypeInfo(train.sy_tr),
-      direction: train.ki === "0" ? "下り" : "上り",
+      direction: train.ki === "0" ? "上り" : "下り",
       destination: this.getDestinationInfo(train.ik_tr),
       delay: train.dl === "00" ? 0 : parseInt(train.dl, 10),
       carCount: train.sr !== "0" ? train.sr : null,

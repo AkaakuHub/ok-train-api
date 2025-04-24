@@ -48,7 +48,7 @@ export class TrainsController {
                   iconName: { type: "string", example: "特" },
                 },
               },
-              direction: { type: "string", example: "上り" },
+              direction: { type: "string", example: "下り" },
               destination: {
                 type: "object",
                 properties: {
@@ -111,7 +111,7 @@ export class TrainsController {
                   iconName: { type: "string", example: "特" },
                 },
               },
-              direction: { type: "string", example: "上り" },
+              direction: { type: "string", example: "下り" },
               destination: {
                 type: "object",
                 properties: {
