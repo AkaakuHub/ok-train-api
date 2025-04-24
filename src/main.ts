@@ -16,10 +16,21 @@ async function bootstrap() {
     })
   );
 
-  const CORS_ORIGINS = process.env.CORS_ORIGINS || "http://localhost:3000";
+  const allowedOrigins = process.env.CORS_ORIGINS
+    .split(',')
+    .map(o => o.trim());
 
   app.enableCors({
-    origin: CORS_ORIGINS.split(","),
+    origin: (origin, callback) => {
+      // origin が undefined の場合（curl/Postmanなど）も許可
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE'],
+    credentials: true,
   });
 
   // Swagger設定
