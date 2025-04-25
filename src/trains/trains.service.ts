@@ -253,7 +253,14 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
 
       // estimatedArrivalが過去なら、追加しない
       const now = new Date();
-      const [hh, mm] = estimatedArrival.split(":").map(Number);
+      let [hh, mm] = estimatedArrival.split(":").map(Number);
+
+      // 返却要素の制限時には遅延も加味して考える
+      // 遅延を加算して、時間の繰り上がりを処理
+      mm += delay;
+      hh += Math.floor(mm / 60);
+      mm %= 60;
+      hh %= 24; // 24時間を超える場合も考慮
 
       // 日付をまたぐ時間帯の処理（00:00～03:59は翌日とみなす）
       let targetDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
