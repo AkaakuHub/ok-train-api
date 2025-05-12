@@ -120,7 +120,7 @@ export class TrainsController {
                 },
               },
               delay: { type: "number", example: 0 },
-              estimatedArrival: { type: "string", example: "11:06" },
+              estimatedDeparture: { type: "string", example: "11:06" },
               isInStation: { type: "boolean", example: true },
               passType: { type: "string", example: "停車" },
               information: { type: "string", example: "遅延情報..." },

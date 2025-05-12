@@ -181,12 +181,12 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
       // 駅IDは先頭英字を除いた数字部分で比較
       const newStationId = stationId.replace(/^[a-zA-Z]/, "").replace(/^0/, "");
       const stop = schedule.stops.find((s) => s.stationId === newStationId);
-      let estimatedArrival = "--:--";
+      let estimatedDeparture = "--:--";
       let passType = "通過";
 
       if (stop) {
-        estimatedArrival = stop.estimatedArrival;
-        if (estimatedArrival !== "--:--") {
+        estimatedDeparture = stop.estimatedDeparture;
+        if (estimatedDeparture !== "--:--") {
           passType = "停車";
         } else {
           continue; // 通過列車はもう載せない
@@ -197,7 +197,7 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
           // // 前の停車駅を探す
           // let prevStop = null;
           // for (let i = stopIndex - 1; i >= 0; i--) {
-          //   if (schedule.stops[i].estimatedArrival !== "--:--") {
+          //   if (schedule.stops[i].estimatedDeparture !== "--:--") {
           //     prevStop = schedule.stops[i];
           //     break;
           //   }
@@ -206,7 +206,7 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
           // // 次の停車駅を探す
           // let nextStop = null;
           // for (let i = stopIndex + 1; i < schedule.stops.length; i++) {
-          //   if (schedule.stops[i].estimatedArrival !== "--:--") {
+          //   if (schedule.stops[i].estimatedDeparture !== "--:--") {
           //     nextStop = schedule.stops[i];
           //     break;
           //   }
@@ -221,8 +221,8 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
 
           //   // if (prevStopPos && currentStopPos && nextStopPos) {
           //   // 時刻を分単位に変換
-          //   const [prevHH, prevMM] = prevStop.estimatedArrival.split(':').map(Number);
-          //   const [nextHH, nextMM] = nextStop.estimatedArrival.split(':').map(Number);
+          //   const [prevHH, prevMM] = prevStop.estimatedDeparture.split(':').map(Number);
+          //   const [nextHH, nextMM] = nextStop.estimatedDeparture.split(':').map(Number);
 
           //   let prevTimeInMinutes = prevHH * 60 + prevMM;
           //   let nextTimeInMinutes = nextHH * 60 + nextMM;
@@ -243,7 +243,7 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
           //   const estimatedPassHH = Math.floor(estimatedPassTimeInMinutes / 60) % 24;
           //   const estimatedPassMM = estimatedPassTimeInMinutes % 60;
 
-          //   estimatedArrival = `${estimatedPassHH.toString().padStart(2, '0')}:${estimatedPassMM.toString().padStart(2, '0')}`;
+          //   estimatedDeparture = `${estimatedPassHH.toString().padStart(2, '0')}:${estimatedPassMM.toString().padStart(2, '0')}`;
           // }
           // // }
         }
@@ -253,7 +253,7 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
 
       // estimatedArrivalが過去なら、追加しない
       const now = new Date();
-      let [hh, mm] = estimatedArrival.split(":").map(Number);
+      let [hh, mm] = estimatedDeparture.split(":").map(Number);
 
       // 返却要素の制限時には遅延も加味して考える
       // 遅延を加算して、時間の繰り上がりを処理
@@ -291,11 +291,11 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
       );
 
       if (d < now) {
-        // this.logger.debug(`スキップ: 列車${train.tr.trim()}の${stop.stationName}到着予定(${estimatedArrival})は過去の時刻です`);
+        // this.logger.debug(`スキップ: 列車${train.tr.trim()}の${stop.stationName}到着予定(${estimatedDeparture})は過去の時刻です`);
         continue;
       }
       // if (passType === "通過") {
-      //   estimatedArrival = "--:--";
+      //   estimatedDeparture = "--:--";
       // }
 
       arrivingTrains.push({
@@ -305,7 +305,7 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
         destination: this.getDestinationInfo(train.ik_tr),
         delay,
         isInStation: train.bs === "0",
-        estimatedArrival,
+        estimatedDeparture,
         passType, // "停車" or "通過"
         information: train.inf || null,
       });
@@ -383,8 +383,9 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
     }
     // dy配列を整形して返す
     const stops = schedule.dy.map((stop: any) => {
-      const scheduledArrival = stop.tt;
-      let estimatedArrival = scheduledArrival;
+      // 実際に表示するのは到着ではなく発車時刻
+      const scheduledArrival = stop.ht;
+      let estimatedDeparture = scheduledArrival;
       if (scheduledArrival && delayMin !== undefined) {
         const [hh, mm] = scheduledArrival.split(":").map(Number);
         const d = new Date();
@@ -392,9 +393,9 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
         d.setMinutes(d.getMinutes() + delayMin);
         const H = d.getHours().toString().padStart(2, "0");
         const M = d.getMinutes().toString().padStart(2, "0");
-        estimatedArrival = `${H}:${M}`;
+        estimatedDeparture = `${H}:${M}`;
       } else if (!scheduledArrival) {
-        estimatedArrival = "--:--";
+        estimatedDeparture = "--:--";
       }
       return {
         stationId: stop.st,
@@ -402,7 +403,7 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
         scheduledArrival,
         scheduledDeparture: stop.ht,
         stopFlag: stop.pa, // '1'=停車, '0'=通過
-        estimatedArrival,
+        estimatedDeparture,
       };
     });
     return {
