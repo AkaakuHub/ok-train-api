@@ -147,8 +147,8 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
    * 駅が所属する路線のみを対象に絞り込む
    */
   async getTrainArrivals(stationIdOrName: string): Promise<any> {
-    // TODO: 新線新宿間のみの列車(ex. 笹塚から新線新宿のみ)も含まれていて、あやまった通過判定がでるのを治す
     // TODO: なぜか、とっくに通り過ぎてるのに表示されることがある
+    // TODO: 表示されない電車がある
 
     const position = this.findPosition(stationIdOrName);
     if (!position || position.kind !== "駅") {
@@ -172,6 +172,8 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
     // 実際に走っているのは089なのに、jsonには0089が入る、のような場合がある
     // 予想: 多分生で配信されるjsonでは全部idが4ケタにフォーマットされていて、idだけでは区別できなさそう。
     // なので、いちいち駅の情報も見に行って、路線判定する
+    // バグ発見: IDが0014の電車なども存在するのに、実際に表示されてない
+    // 0埋めまわりにバグがある
 
     const arrivingTrains = [];
     for (const train of allTrains) {
