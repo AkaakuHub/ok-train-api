@@ -149,6 +149,7 @@ export class TrainsService implements OnModuleInit, OnModuleDestroy {
   async getTrainArrivals(stationIdOrName: string): Promise<any> {
     // TODO: なぜか、とっくに通り過ぎてるのに表示されることがある
     // TODO: 表示されない電車がある
+    // わかった。まだ始発駅を発車していないから、探索できていない。
 
     const position = this.findPosition(stationIdOrName);
     if (!position || position.kind !== "駅") {
